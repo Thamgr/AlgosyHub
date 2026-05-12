@@ -77,7 +77,7 @@ def upgrade() -> None:
     op.create_table(
         "contests",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("group_id", sa.Integer, sa.ForeignKey("groups.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("group_id", sa.Integer, sa.ForeignKey("groups.id", ondelete="SET NULL")),
         sa.Column("teacher_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("title", sa.String(300), nullable=False),
         sa.Column(

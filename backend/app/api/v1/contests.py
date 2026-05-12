@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from app.core.deps import CurrentUserID, SessionDep, require_role
 from app.models.enums import ContestStatus, UserRole
@@ -14,8 +14,13 @@ TeacherDep = Annotated[int, Depends(require_role(UserRole.teacher))]
 
 
 @router.get("", response_model=list[ContestResponse])
-async def list_contests(group_id: int, session: SessionDep, _: CurrentUserID):
-    return await contest_service.list_contests_for_group(session, group_id)
+async def list_contests(session: SessionDep, teacher_id: TeacherDep, group_id: int | None = None):
+    if group_id is not None:
+        return await contest_service.list_contests_for_group(session, group_id)
+    from sqlalchemy import select
+    from app.models.contest import Contest
+    result = await session.execute(select(Contest).where(Contest.teacher_id == teacher_id))
+    return list(result.scalars().all())
 
 
 @router.post("", response_model=ContestResponse, status_code=201)
@@ -46,6 +51,18 @@ async def add_problem(
     )
     await session.commit()
     return problem
+
+
+@router.put("/{contest_id}/group", response_model=ContestResponse)
+async def assign_group(
+    contest_id: int,
+    session: SessionDep,
+    teacher_id: TeacherDep,
+    group_id: int | None = Body(default=None, embed=True),
+):
+    contest = await contest_service.assign_group(session, contest_id, teacher_id, group_id)
+    await session.commit()
+    return contest
 
 
 @router.post("/{contest_id}/start", response_model=ContestResponse)

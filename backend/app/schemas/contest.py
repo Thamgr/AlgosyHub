@@ -7,15 +7,15 @@ from app.schemas.problem import ProblemResponse
 
 
 class ContestCreate(BaseModel):
-    group_id: int
     title: str
+    group_id: int | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
 
 
 class ContestResponse(BaseModel):
     id: int
-    group_id: int
+    group_id: int | None
     title: str
     status: ContestStatus
     starts_at: datetime | None

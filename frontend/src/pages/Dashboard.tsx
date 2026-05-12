@@ -1,43 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../api/client";
 import { contestsApi } from "../api/contests";
+import { groupsApi } from "../api/groups";
 import { useAuthStore } from "../store/auth";
-import type { Contest } from "../api/types";
+import type { Contest, Group } from "../api/types";
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const isTeacher = user?.role === "teacher";
 
-  const [groupId, setGroupId] = useState("");
-  const [title, setTitle] = useState("");
+  const [groups, setGroups] = useState<Group[]>([]);
   const [contests, setContests] = useState<Contest[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [contestTitle, setContestTitle] = useState("");
   const [error, setError] = useState("");
 
-  async function loadContests(e: React.FormEvent) {
+  useEffect(() => {
+    groupsApi.list().then(setGroups);
+    if (isTeacher) {
+      contestsApi.listMine().then(setContests);
+    }
+  }, [isTeacher]);
+
+  async function handleCreateGroup(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
+    if (!groupName.trim()) return;
     try {
-      const { data } = await api.get<Contest[]>(
-        `/api/v1/contests?group_id=${groupId}`
-      );
-      setContests(data);
-      setLoaded(true);
-    } catch {
-      setError("Группа не найдена");
+      const group = await groupsApi.create({ name: groupName.trim() });
+      setGroups((prev) => [...prev, group]);
+      setGroupName("");
+    } catch (err: any) {
+      setError(err.response?.data?.detail ?? "Ошибка");
     }
   }
 
-  async function createContest(e: React.FormEvent) {
+  async function handleCreateContest(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !groupId) return;
+    if (!contestTitle.trim()) return;
     try {
-      const contest = await contestsApi.create({
-        group_id: Number(groupId),
-        title: title.trim(),
-      });
+      const contest = await contestsApi.create({ title: contestTitle.trim() });
       navigate(`/contests/${contest.id}`);
     } catch (err: any) {
       setError(err.response?.data?.detail ?? "Ошибка");
@@ -62,57 +64,70 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="p-6 max-w-2xl mx-auto space-y-6">
-        {/* Контесты группы */}
-        <section>
-          <h2 className="text-sm font-medium text-gray-700 mb-2">Контесты группы</h2>
-          <form onSubmit={loadContests} className="flex gap-2 mb-3">
-            <input
-              type="number"
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              placeholder="ID группы"
-              className="border rounded px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
-            >
-              Показать
-            </button>
-          </form>
+      <main className="p-6 max-w-2xl mx-auto space-y-8">
 
-          {loaded && contests.length === 0 && (
-            <p className="text-sm text-gray-400">Контестов нет</p>
+        {/* Группы */}
+        <section>
+          <h2 className="text-sm font-medium text-gray-700 mb-2">Группы</h2>
+          {groups.length === 0 ? (
+            <p className="text-sm text-gray-400">Нет групп</p>
+          ) : (
+            <div className="border rounded divide-y mb-3">
+              {groups.map((g) => (
+                <Link
+                  key={g.id}
+                  to={`/groups/${g.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                >
+                  <span className="text-sm font-medium">{g.name}</span>
+                  <span className="text-xs text-gray-400">→</span>
+                </Link>
+              ))}
+            </div>
           )}
-          {contests.map((c) => (
-            <Link
-              key={c.id}
-              to={`/contests/${c.id}`}
-              className="flex items-center justify-between border rounded px-4 py-3 bg-white hover:bg-gray-50 mb-2"
-            >
-              <span className="text-sm font-medium">{c.title}</span>
-              <span className="text-xs text-gray-400">{c.status}</span>
-            </Link>
-          ))}
+          {isTeacher && (
+            <form onSubmit={handleCreateGroup} className="flex gap-2">
+              <input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Название группы"
+                className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
+              >
+                Создать
+              </button>
+            </form>
+          )}
         </section>
 
-        {/* Создать контест — только учитель */}
+        {/* Контесты учителя */}
         {isTeacher && (
           <section>
-            <h2 className="text-sm font-medium text-gray-700 mb-2">Создать контест</h2>
-            <form onSubmit={createContest} className="flex gap-2">
+            <h2 className="text-sm font-medium text-gray-700 mb-2">Мои контесты</h2>
+            {contests.length === 0 ? (
+              <p className="text-sm text-gray-400">Нет контестов</p>
+            ) : (
+              <div className="border rounded divide-y mb-3">
+                {contests.map((c) => (
+                  <Link
+                    key={c.id}
+                    to={`/contests/${c.id}`}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                  >
+                    <span className="text-sm font-medium">{c.title}</span>
+                    <span className="text-xs text-gray-400">{c.status}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleCreateContest} className="flex gap-2">
               <input
-                type="number"
-                value={groupId}
-                onChange={(e) => setGroupId(e.target.value)}
-                placeholder="ID группы"
-                className="border rounded px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Название"
+                value={contestTitle}
+                onChange={(e) => setContestTitle(e.target.value)}
+                placeholder="Название контеста"
                 className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button

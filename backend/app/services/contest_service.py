@@ -39,6 +39,20 @@ async def list_contests_for_group(session: AsyncSession, group_id: int) -> list[
     return await ContestRepository(session).get_by_group(group_id)
 
 
+async def assign_group(
+    session: AsyncSession, contest_id: int, teacher_id: int, group_id: int | None
+) -> Contest:
+    repo = ContestRepository(session)
+    contest = await repo.get(contest_id)
+    if not contest:
+        raise AppError("Contest not found", 404)
+    if contest.teacher_id != teacher_id:
+        raise AppError("Forbidden", 403)
+    contest.group_id = group_id
+    await session.flush()
+    return contest
+
+
 async def add_problem(
     session: AsyncSession,
     contest_id: int,

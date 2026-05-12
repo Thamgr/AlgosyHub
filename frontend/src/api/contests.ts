@@ -2,8 +2,10 @@ import api from "./client";
 import type { Contest, Problem } from "./types";
 
 export const contestsApi = {
-  create: (data: { group_id: number; title: string; starts_at?: string; ends_at?: string }) =>
+  create: (data: { title: string; group_id?: number; starts_at?: string; ends_at?: string }) =>
     api.post<Contest>("/api/v1/contests", data).then((r) => r.data),
+
+  listMine: () => api.get<Contest[]>("/api/v1/contests").then((r) => r.data),
 
   get: (id: number) => api.get<Contest>(`/api/v1/contests/${id}`).then((r) => r.data),
 

@@ -19,7 +19,7 @@ class Contest(Base):
     __tablename__ = "contests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id", ondelete="SET NULL"))
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     status: Mapped[ContestStatus] = mapped_column(default=ContestStatus.draft)

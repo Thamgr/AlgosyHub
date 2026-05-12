@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import ContestDetail from "./pages/ContestDetail";
+import GroupDetail from "./pages/GroupDetail";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -22,6 +23,7 @@ export default function Router() {
           <RequireAuth>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/groups/:id" element={<GroupDetail />} />
               <Route path="/contests/:id" element={<ContestDetail />} />
             </Routes>
           </RequireAuth>
