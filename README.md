@@ -20,7 +20,7 @@ API docs: http://localhost:8000/docs
 # Backend
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 
 # Frontend
