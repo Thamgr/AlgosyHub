@@ -15,22 +15,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE userrole AS ENUM ('student', 'teacher')")
-    op.execute("CREATE TYPE conteststatus AS ENUM ('draft', 'running', 'finished')")
-    op.execute("CREATE TYPE externalsource AS ENUM ('codeforces')")
-    op.execute(
-        "CREATE TYPE submissionverdict AS ENUM "
-        "('pending', 'running', 'accepted', 'wrong_answer', "
-        "'time_limit', 'memory_limit', 'runtime_error', 'compilation_error', 'rejected')"
-    )
-
     op.create_table(
         "users",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("email", sa.String(255), nullable=False, unique=True),
         sa.Column("username", sa.String(100), nullable=False, unique=True),
         sa.Column("hashed_password", sa.String(255), nullable=False),
-        sa.Column("role", sa.Enum("student", "teacher", name="userrole"), nullable=False),
+        sa.Column(
+            "role",
+            sa.Enum("student", "teacher", name="userrole", create_type=True),
+            nullable=False,
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -62,7 +57,7 @@ def upgrade() -> None:
     op.create_table(
         "problems",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("external_source", sa.Enum("codeforces", name="externalsource"), nullable=False),
+        sa.Column("external_source", sa.Enum("codeforces", name="externalsource", create_type=True), nullable=False),
         sa.Column("external_id", sa.String(50), nullable=False),
         sa.Column("title", sa.String(500), nullable=False),
         sa.Column("tags", sa.JSON, nullable=False, server_default="[]"),
@@ -87,7 +82,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(300), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("draft", "running", "finished", name="conteststatus"),
+            sa.Enum("draft", "running", "finished", name="conteststatus", create_type=True),
             nullable=False,
             server_default="draft",
         ),
@@ -123,6 +118,7 @@ def upgrade() -> None:
                 "time_limit", "memory_limit", "runtime_error",
                 "compilation_error", "rejected",
                 name="submissionverdict",
+                create_type=True,
             ),
             nullable=False,
             server_default="pending",
