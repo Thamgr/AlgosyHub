@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
             password=settings.CF_SERVICE_PASSWORD,
             api_key=settings.CF_API_KEY,
             api_secret=settings.CF_API_SECRET,
+            session_cookie=settings.CF_SESSION_COOKIE,
         ),
     )
     scheduler = create_scheduler()

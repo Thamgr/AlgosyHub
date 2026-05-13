@@ -73,24 +73,34 @@ CF_VERDICT_MAP = {
 }
 
 
-_CSRF_META_TAG_RE = re.compile(
-    r'<meta\s[^>]*name=["\']X-Csrf-Token["\'][^>]*>', re.IGNORECASE
+# Codeforces размещает CSRF-токен в нескольких местах на странице. Ищем по
+# любому из них, чтобы быть устойчивыми к косметическим правкам шаблона:
+#   <meta name="X-Csrf-Token" content="..."/>            ← в <head>
+#   <span class="csrf-token" data-csrf="..."></span>     ← рядом с формой
+#   <input type="hidden" name="csrf_token" value="..."/> ← в самих формах
+_DATA_CSRF_RE = re.compile(r'data-csrf=["\']([0-9a-f]{16,})["\']', re.IGNORECASE)
+_META_CSRF_RE = re.compile(
+    r'<meta\s[^>]*name=["\']X-Csrf-Token["\'][^>]*content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
 )
-_CONTENT_ATTR_RE = re.compile(r'content=["\']([^"\']+)["\']', re.IGNORECASE)
-_CSRF_INPUT_RE = re.compile(
+_META_CSRF_REV_RE = re.compile(
+    r'<meta\s[^>]*content=["\']([^"\']+)["\'][^>]*name=["\']X-Csrf-Token["\']',
+    re.IGNORECASE,
+)
+_INPUT_CSRF_RE = re.compile(
     r'name=["\']csrf_token["\']\s+value=["\']([^"\']+)["\']', re.IGNORECASE
 )
 
 
 def _extract_csrf(html: str) -> str:
-    m = _CSRF_META_TAG_RE.search(html)
-    if m:
-        attr = _CONTENT_ATTR_RE.search(m.group(0))
-        if attr:
-            return attr.group(1)
-    m2 = _CSRF_INPUT_RE.search(html)
-    if m2:
-        return m2.group(1)
+    for rx in (_DATA_CSRF_RE, _META_CSRF_RE, _META_CSRF_REV_RE, _INPUT_CSRF_RE):
+        m = rx.search(html)
+        if m:
+            return m.group(1)
+    snippet = html[:500].replace("\n", " ")
+    logger.warning(
+        "Could not extract CSRF token. First 500 chars of CF response: %s", snippet
+    )
     raise RuntimeError("Could not extract CSRF token from Codeforces page")
 
 
@@ -142,11 +152,13 @@ class CodeforcesAdapter(JudgeAdapter):
         password: str = "",
         api_key: str = "",
         api_secret: str = "",
+        session_cookie: str = "",
     ) -> None:
         self.account = account
         self.password = password
         self._api_key = api_key
         self._api_secret = api_secret
+        self._session_cookie = session_cookie.strip()
 
         self._authed = bool(api_key and api_secret)
         if self._authed:
@@ -178,6 +190,27 @@ class CodeforcesAdapter(JudgeAdapter):
         self._logged_in = False
         self._ftaa = _rand_ftaa()
         self._bfaa = _rand_bfaa()
+
+        if self._session_cookie:
+            self._inject_cookie_header(self._session_cookie)
+
+    def _inject_cookie_header(self, raw: str) -> None:
+        """Парсит строку из браузерного заголовка `Cookie:` (name=value; …)
+        и складывает все пары в http-клиент."""
+        count = 0
+        for part in raw.split(";"):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            name, _, value = part.partition("=")
+            name, value = name.strip(), value.strip()
+            if not name:
+                continue
+            self._http.cookies.set(
+                name, value, domain="codeforces.com", path="/"
+            )
+            count += 1
+        logger.info("Injected %d Codeforces session cookies from env", count)
 
     def _lock_for(self, contest_id: int) -> asyncio.Lock:
         lock = self._locks.get(contest_id)
@@ -254,15 +287,45 @@ class CodeforcesAdapter(JudgeAdapter):
 
     # ---------- submit / poll ----------
 
+    async def _check_logged_in(self) -> bool:
+        """Проверяет, авторизованы ли мы прямо сейчас (по присутствию /logout)."""
+        try:
+            r = await self._web_get(f"{CF_BASE}/")
+            return r.status_code == 200 and "/logout" in r.text
+        except httpx.HTTPError:
+            return False
+
     async def _login(self) -> None:
-        if not self.account or not self.password:
+        if not self.account:
             raise RuntimeError(
-                "Codeforces service account is not configured: "
-                "set CF_SERVICE_ACCOUNT and CF_SERVICE_PASSWORD"
+                "Codeforces service account is not configured: set CF_SERVICE_ACCOUNT"
             )
         async with self._login_lock:
             if self._logged_in:
                 return
+
+            # Режим 1 — куки из браузера. Программный логин CF блокирует
+            # Cloudflare-ом, поэтому это самый надёжный путь.
+            if self._session_cookie:
+                if await self._check_logged_in():
+                    self._logged_in = True
+                    logger.info(
+                        "Codeforces session cookie is valid (logged in as %s)",
+                        self.account,
+                    )
+                    return
+                raise RuntimeError(
+                    "Provided CF_SESSION_COOKIE is invalid or expired — "
+                    "log into Codeforces in a browser and copy a fresh "
+                    "`Cookie:` header"
+                )
+
+            # Режим 2 — программный логин логин+пароль (часто блокируется CF).
+            if not self.password:
+                raise RuntimeError(
+                    "Codeforces auth is not configured: set CF_SESSION_COOKIE "
+                    "(recommended) or CF_SERVICE_PASSWORD"
+                )
 
             r = await self._web_get(f"{CF_BASE}/enter")
             r.raise_for_status()
@@ -282,10 +345,11 @@ class CodeforcesAdapter(JudgeAdapter):
                 },
             )
             r2.raise_for_status()
-            # CF redirects to the profile page on success; the "logout" link
-            # is present in the header markup of any authenticated page.
             if "/logout" not in r2.text:
-                raise RuntimeError("Codeforces login failed (check credentials)")
+                raise RuntimeError(
+                    "Codeforces login failed (Cloudflare may block "
+                    "programmatic logins — try CF_SESSION_COOKIE)"
+                )
             self._logged_in = True
             logger.info("Logged into Codeforces as %s", self.account)
 
@@ -324,23 +388,26 @@ class CodeforcesAdapter(JudgeAdapter):
         async with self._submit_lock:
             before_id = await self._latest_submission_id()
 
-            r = await self._web_get(f"{CF_BASE}/problemset/submit")
+            submit_page = f"{CF_BASE}/contest/{contest_id}/submit"
+            r = await self._web_get(submit_page)
             r.raise_for_status()
             csrf = _extract_csrf(r.text)
 
+            # Формат заимствован из рабочего https://github.com/Nirlep5252/codeforces-cli/blob/main/cf/submit.py
+            # — contest-specific URL + submittedProblemIndex + contestId.
             resp = await self._web_post(
-                f"{CF_BASE}/problemset/submit?csrf_token={csrf}",
+                f"{submit_page}?csrf_token={csrf}",
                 data={
                     "csrf_token": csrf,
-                    "ftaa": self._ftaa,
-                    "bfaa": self._bfaa,
+                    "ftaa": "",
+                    "bfaa": "",
                     "action": "submitSolutionFormSubmitted",
-                    "submittedProblemCode": f"{contest_id}{index}",
+                    "submittedProblemIndex": index,
                     "programTypeId": str(program_type_id),
+                    "contestId": str(contest_id),
                     "source": source_to_send,
                     "tabSize": "4",
                     "sourceCodeConfirmed": "true",
-                    "_tta": "594",
                 },
             )
             resp.raise_for_status()

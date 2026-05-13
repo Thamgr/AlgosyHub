@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     CF_SERVICE_PASSWORD: str = ""
     CF_API_KEY: str = ""
     CF_API_SECRET: str = ""
+    # Сырая строка из браузерного заголовка `Cookie:` для codeforces.com.
+    # Используется когда программный login заблокирован Cloudflare/anti-bot:
+    # достаточно один раз залогиниться руками и скопировать заголовок Cookie.
+    CF_SESSION_COOKIE: str = ""
 
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
