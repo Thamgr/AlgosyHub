@@ -53,8 +53,13 @@ export interface Contest {
 
 export interface Submission {
   id: number;
+  user_id: number;
   problem_id: number;
+  contest_id: number | null;
   language: string;
   verdict: SubmissionVerdict;
+  external_submission_id: string | null;
+  time_ms: number | null;
+  memory_mb: number | null;
   created_at: string;
 }
