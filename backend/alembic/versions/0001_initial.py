@@ -37,7 +37,12 @@ def upgrade() -> None:
     op.create_table(
         "groups",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("teacher_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "teacher_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.String(1000)),
         sa.Column(
@@ -50,14 +55,28 @@ def upgrade() -> None:
 
     op.create_table(
         "group_members",
-        sa.Column("group_id", sa.Integer, sa.ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "group_id",
+            sa.Integer,
+            sa.ForeignKey("groups.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
     )
 
     op.create_table(
         "problems",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("external_source", sa.Enum("codeforces", name="externalsource", create_type=True), nullable=False),
+        sa.Column(
+            "external_source",
+            sa.Enum("codeforces", name="externalsource", create_type=True),
+            nullable=False,
+        ),
         sa.Column("external_id", sa.String(50), nullable=False),
         sa.Column("title", sa.String(500), nullable=False),
         sa.Column("tags", sa.JSON, nullable=False, server_default="[]"),
@@ -77,8 +96,18 @@ def upgrade() -> None:
     op.create_table(
         "contests",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("group_id", sa.Integer, sa.ForeignKey("groups.id", ondelete="SET NULL")),
-        sa.Column("teacher_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "group_id",
+            sa.Integer,
+            sa.ForeignKey("groups.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        sa.Column(
+            "teacher_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("title", sa.String(300), nullable=False),
         sa.Column(
             "status",
@@ -98,17 +127,42 @@ def upgrade() -> None:
 
     op.create_table(
         "contest_problems",
-        sa.Column("contest_id", sa.Integer, sa.ForeignKey("contests.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("problem_id", sa.Integer, sa.ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "contest_id",
+            sa.Integer,
+            sa.ForeignKey("contests.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "problem_id",
+            sa.Integer,
+            sa.ForeignKey("problems.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("order_index", sa.Integer, nullable=False, server_default="0"),
     )
 
     op.create_table(
         "submissions",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("problem_id", sa.Integer, sa.ForeignKey("problems.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("contest_id", sa.Integer, sa.ForeignKey("contests.id", ondelete="SET NULL")),
+        sa.Column(
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "problem_id",
+            sa.Integer,
+            sa.ForeignKey("problems.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "contest_id",
+            sa.Integer,
+            sa.ForeignKey("contests.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("language", sa.String(50), nullable=False),
         sa.Column("source_code", sa.Text, nullable=False),
         sa.Column(
@@ -137,8 +191,18 @@ def upgrade() -> None:
     op.create_table(
         "ai_messages",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("problem_id", sa.Integer, sa.ForeignKey("problems.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "problem_id",
+            sa.Integer,
+            sa.ForeignKey("problems.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("role", sa.String(20), nullable=False),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column(
