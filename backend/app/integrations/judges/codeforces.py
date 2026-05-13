@@ -3,7 +3,6 @@ import re
 import time
 from typing import Any
 
-import codeforcespy.errors
 import codeforcespy.processors
 import httpx
 
@@ -12,8 +11,9 @@ from app.models.enums import SubmissionVerdict
 
 CF_API = "https://codeforces.com/api"
 
-# Per-contest cache of problem metadata. With auth, each call is ~few KB; without
-# auth CF only allows param-less `contest.standings`, which can be multi-MB.
+# Per-contest cache of problem metadata. The CF API only allows non-admin users
+# to call `contest.standings` anonymously with no extra params, so a single call
+# returns the full ranklist (multi-MB) — we cache aggressively.
 _CONTEST_TTL = 30 * 60  # 30 minutes
 
 
@@ -51,6 +51,11 @@ class CodeforcesAdapter(JudgeAdapter):
         self._api_secret = api_secret
 
         self._authed = bool(api_key and api_secret)
+        # The auth client is only used for endpoints that actually accept auth
+        # (e.g. user.status for submission polling). `contest.standings` does
+        # NOT — non-admin users may only call it anonymously with `contestId`
+        # as the sole parameter, so problem metadata always goes through the
+        # plain httpx client.
         if self._authed:
             self._client: codeforcespy.processors.AsyncMethod | None = (
                 codeforcespy.processors.AsyncMethod(
@@ -59,10 +64,9 @@ class CodeforcesAdapter(JudgeAdapter):
                     secret=api_secret,
                 )
             )
-            self._fallback_http: httpx.AsyncClient | None = None
         else:
             self._client = None
-            self._fallback_http = httpx.AsyncClient(timeout=30)
+        self._http = httpx.AsyncClient(timeout=30)
 
         self._contest_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
         self._locks: dict[int, asyncio.Lock] = {}
@@ -74,49 +78,22 @@ class CodeforcesAdapter(JudgeAdapter):
             self._locks[contest_id] = lock
         return lock
 
-    async def _fetch_contest_problems_authed(self, contest_id: int) -> list[dict[str, Any]]:
-        assert self._client is not None
+    async def _fetch_contest_problems(self, contest_id: int) -> list[dict[str, Any]]:
+        # CF requires this call to be fully anonymous with no extra params,
+        # otherwise it returns: "Non-gym contest standings for non-admin users
+        # are available only via anonymous GET requests with no extra parameters".
         try:
-            standings_list = await self._client.get_contest_standings(
-                contest_id=contest_id,
-                from_index=1,
-                count=1,
-                show_unofficial=False,
+            resp = await self._http.get(
+                f"{CF_API}/contest.standings",
+                params={"contestId": contest_id},
             )
-        except codeforcespy.errors.APIError as e:
-            raise RuntimeError(f"CF API error: {e}") from e
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"CF API request failed: {e}") from e
 
-        if not standings_list:
-            raise RuntimeError("CF API returned empty standings")
-
-        standings = standings_list[0]
-        raw_problems = standings.problems
-        if raw_problems is None:
-            return []
-        if not isinstance(raw_problems, list):
-            raw_problems = [raw_problems]
-
-        return [
-            {
-                "index": p.index,
-                "name": p.name,
-                "tags": list(p.tags or []),
-                "rating": p.rating,
-            }
-            for p in raw_problems
-        ]
-
-    async def _fetch_contest_problems_anon(self, contest_id: int) -> list[dict[str, Any]]:
-        # Without API key, CF only allows `contest.standings?contestId=X` with no other
-        # params — response includes full ranklist, which we discard.
-        assert self._fallback_http is not None
-        resp = await self._fallback_http.get(
-            f"{CF_API}/contest.standings",
-            params={"contestId": contest_id},
-        )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise RuntimeError(f"CF API HTTP {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
-        if data["status"] != "OK":
+        if data.get("status") != "OK":
             raise RuntimeError(f"CF API error: {data.get('comment')}")
         return data["result"]["problems"]
 
@@ -126,11 +103,7 @@ class CodeforcesAdapter(JudgeAdapter):
             if cached and time.monotonic() - cached[0] < _CONTEST_TTL:
                 return cached[1]
 
-            if self._authed:
-                problems = await self._fetch_contest_problems_authed(contest_id)
-            else:
-                problems = await self._fetch_contest_problems_anon(contest_id)
-
+            problems = await self._fetch_contest_problems(contest_id)
             self._contest_cache[contest_id] = (time.monotonic(), problems)
             return problems
 

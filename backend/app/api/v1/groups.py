@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
-from app.core.deps import CurrentUserID, SessionDep, require_role
+from app.core.deps import CurrentUser, CurrentUserID, SessionDep, require_role
 from app.models.enums import UserRole
 from app.schemas.auth import UserResponse
 from app.schemas.contest import ContestResponse
@@ -22,12 +22,8 @@ async def create_group(body: GroupCreate, session: SessionDep, teacher_id: Teach
 
 
 @router.get("", response_model=list[GroupResponse])
-async def list_groups(session: SessionDep, user_id: CurrentUserID):
-    from sqlalchemy import select
-    from app.models.user import User
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one()
-    return await group_service.list_groups(session, user_id, user.role)
+async def list_groups(session: SessionDep, user: CurrentUser):
+    return await group_service.list_groups(session, user.id, user.role)
 
 
 @router.get("/{group_id}", response_model=GroupResponse)
