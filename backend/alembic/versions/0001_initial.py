@@ -164,8 +164,8 @@ def upgrade() -> None:
             sa.ForeignKey("contests.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("language", sa.String(50), nullable=False),
-        sa.Column("source_code", sa.Text, nullable=False),
+        sa.Column("language", sa.String(100), nullable=False),
+        sa.Column("source_code", sa.Text),
         sa.Column(
             "verdict",
             sa.Enum(
@@ -187,6 +187,39 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+    )
+
+    op.create_table(
+        "judge_accounts",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column(
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "source",
+            sa.Enum(
+                "codeforces", "informatics", "leetcode",
+                name="externalsource", create_type=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column("handle", sa.String(100), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.UniqueConstraint("user_id", "source"),
     )
 
     op.create_table(
@@ -217,6 +250,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("ai_messages")
+    op.drop_table("judge_accounts")
     op.drop_table("submissions")
     op.drop_table("contest_problems")
     op.drop_table("contests")

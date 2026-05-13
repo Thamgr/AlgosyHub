@@ -1,6 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -22,10 +23,22 @@ class ProblemData:
 
 
 @dataclass
-class SubmissionResult:
+class ExternalSubmission:
+    """Снапшот посылки с внешнего judge'а (наблюдаемая, не созданная нами).
+
+    ``external_problem_id`` — идентификатор задачи в формате внешнего судьи
+    (для CF — ``"1A"`` / ``"1900F2"``). По нему мы сопоставляем посылку с
+    нашей `Problem` (поле `Problem.external_id`).
+    """
+
+    external_id: str  # id посылки на judge'е (для CF — int as str)
+    external_problem_id: str
+    language: str
     verdict: SubmissionVerdict
+    submitted_at: datetime
     time_ms: int | None = None
     memory_mb: int | None = None
+    submission_url: str | None = None
 
 
 _HEAD_RE = re.compile(r"<head([^>]*)>", re.IGNORECASE)
@@ -40,14 +53,36 @@ def _inject_base(html: str, base_url: str) -> str:
 
 
 class JudgeAdapter(ABC):
-    @abstractmethod
-    async def fetch_problem(self, external_id: str) -> ProblemData: ...
+    """Адаптер для внешнего judge'а (Codeforces, Informatics, …).
+
+    Платформа сама не отправляет посылки и не логинит юзеров за судью —
+    студент сдаёт решение в нативном UI судьи (например по ссылке
+    ``codeforces.com/contest/.../submit``), а мы только наблюдаем за его
+    посылками через публичные API.
+    """
 
     @abstractmethod
-    async def submit(self, external_id: str, language: str, source_code: str) -> str: ...
+    async def fetch_problem(self, external_id: str) -> ProblemData:
+        """Импортирует метаданные задачи по её внешнему id."""
 
     @abstractmethod
-    async def poll_verdict(self, external_submission_id: str) -> SubmissionResult: ...
+    async def fetch_user_submissions(
+        self, handle: str, count: int = 50
+    ) -> list[ExternalSubmission]:
+        """Возвращает последние посылки пользователя ``handle`` на этом судье.
+
+        Используется поллером для синхронизации посылок в наших контестах.
+        Каждый адаптер сам выбирает оптимальный endpoint (для CF — ``user.status``).
+        """
+
+    def submit_url(self, contest_external_id: str, problem_index: str) -> str | None:
+        """URL формы сдачи для проблемы (опционально).
+
+        Если адаптер умеет конструировать deep-link на форму сдачи у судьи —
+        возвращает его. Иначе ``None`` (фронтенд тогда покажет просто ссылку
+        на условие).
+        """
+        return None
 
     async def render_statement_html(self, problem: "Problem") -> str:
         """Return a full HTML page with the problem statement, to be served in a new tab.

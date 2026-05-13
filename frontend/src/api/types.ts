@@ -63,3 +63,9 @@ export interface Submission {
   memory_mb: number | null;
   created_at: string;
 }
+
+export interface JudgeAccount {
+  source: ExternalSource;
+  handle: string;
+  updated_at: string;
+}

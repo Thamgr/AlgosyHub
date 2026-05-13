@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import auth as auth_router
 from app.api.v1 import contests as contests_router
 from app.api.v1 import groups as groups_router
+from app.api.v1 import me as me_router
 from app.api.v1 import problems as problems_router
 from app.api.v1 import submissions as submissions_router
 from app.core.config import settings
@@ -14,21 +15,12 @@ from app.core.exceptions import register_exception_handlers
 from app.integrations.judges import registry
 from app.integrations.judges.codeforces import CodeforcesAdapter
 from app.models.enums import ExternalSource
-from app.workers.verdict_poller import create_scheduler
+from app.workers.submission_poller import create_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    registry.register(
-        ExternalSource.codeforces,
-        CodeforcesAdapter(
-            account=settings.CF_SERVICE_ACCOUNT,
-            password=settings.CF_SERVICE_PASSWORD,
-            api_key=settings.CF_API_KEY,
-            api_secret=settings.CF_API_SECRET,
-            session_cookie=settings.CF_SESSION_COOKIE,
-        ),
-    )
+    registry.register(ExternalSource.codeforces, CodeforcesAdapter())
     scheduler = create_scheduler()
     scheduler.start()
     try:
@@ -67,6 +59,7 @@ app.include_router(groups_router.router, prefix="/api/v1")
 app.include_router(problems_router.router, prefix="/api/v1")
 app.include_router(contests_router.router, prefix="/api/v1")
 app.include_router(submissions_router.router, prefix="/api/v1")
+app.include_router(me_router.router, prefix="/api/v1")
 
 
 @app.get("/healthz", tags=["system"])

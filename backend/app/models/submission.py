@@ -14,8 +14,8 @@ class Submission(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"))
     contest_id: Mapped[int | None] = mapped_column(ForeignKey("contests.id", ondelete="SET NULL"))
-    language: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_code: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_code: Mapped[str | None] = mapped_column(Text)
     verdict: Mapped[SubmissionVerdict] = mapped_column(default=SubmissionVerdict.pending)
     external_submission_id: Mapped[str | None] = mapped_column(String(100))
     time_ms: Mapped[int | None]

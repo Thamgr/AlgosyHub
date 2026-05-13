@@ -7,6 +7,7 @@ import ContestDetail from "./pages/ContestDetail";
 import CreateContest from "./pages/CreateContest";
 import CreateGroup from "./pages/CreateGroup";
 import GroupDetail from "./pages/GroupDetail";
+import Profile from "./pages/Profile";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -41,6 +42,7 @@ export default function Router() {
                 element={<RequireTeacher><CreateContest /></RequireTeacher>}
               />
               <Route path="/contests/:id" element={<ContestDetail />} />
+              <Route path="/profile" element={<Profile />} />
             </Routes>
           </RequireAuth>
         }

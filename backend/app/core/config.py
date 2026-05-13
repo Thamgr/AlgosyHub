@@ -8,14 +8,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_TTL_DAYS: int = 7
 
-    CF_SERVICE_ACCOUNT: str = ""
-    CF_SERVICE_PASSWORD: str = ""
+    # CF API key/secret для приватных API (опционально). Для опроса публичных
+    # посылок через user.status не требуются.
     CF_API_KEY: str = ""
     CF_API_SECRET: str = ""
-    # Сырая строка из браузерного заголовка `Cookie:` для codeforces.com.
-    # Используется когда программный login заблокирован Cloudflare/anti-bot:
-    # достаточно один раз залогиниться руками и скопировать заголовок Cookie.
-    CF_SESSION_COOKIE: str = ""
 
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"

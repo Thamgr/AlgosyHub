@@ -23,6 +23,9 @@ export default function Dashboard() {
       <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
         <span className="font-semibold">AlgosyHub</span>
         <div className="flex items-center gap-4 text-sm">
+          <Link to="/profile" className="text-gray-700 hover:underline">
+            Профиль
+          </Link>
           <span className="text-gray-500">
             {user?.username}{" "}
             <span className="text-xs text-gray-400">({user?.role})</span>
