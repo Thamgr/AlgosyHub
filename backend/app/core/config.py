@@ -14,5 +14,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
 
+    # Comma-separated list of allowed CORS origins.
+    # Use "*" to allow any origin (sets allow_origin_regex=".*" under the hood).
+    CORS_ORIGINS: str = "*"
+
 
 settings = Settings()
