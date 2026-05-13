@@ -14,6 +14,8 @@ class ContestStatus(str, enum.Enum):
 
 class ExternalSource(str, enum.Enum):
     codeforces = "codeforces"
+    informatics = "informatics"
+    leetcode = "leetcode"
 
 
 class SubmissionVerdict(str, enum.Enum):

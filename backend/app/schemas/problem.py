@@ -10,8 +10,6 @@ class ProblemResponse(BaseModel):
     title: str
     tags: list[str]
     difficulty: int | None
-    time_limit_ms: int | None
-    memory_limit_mb: int | None
-    cf_url: str
+    external_url: str
 
     model_config = {"from_attributes": True}

@@ -10,6 +10,8 @@ class Settings(BaseSettings):
 
     CF_SERVICE_ACCOUNT: str = ""
     CF_SERVICE_PASSWORD: str = ""
+    CF_API_KEY: str = ""
+    CF_API_SECRET: str = ""
 
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"

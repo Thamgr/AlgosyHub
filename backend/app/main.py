@@ -19,7 +19,12 @@ from app.models.enums import ExternalSource
 async def lifespan(app: FastAPI):
     registry.register(
         ExternalSource.codeforces,
-        CodeforcesAdapter(settings.CF_SERVICE_ACCOUNT, settings.CF_SERVICE_PASSWORD),
+        CodeforcesAdapter(
+            account=settings.CF_SERVICE_ACCOUNT,
+            password=settings.CF_SERVICE_PASSWORD,
+            api_key=settings.CF_API_KEY,
+            api_secret=settings.CF_API_SECRET,
+        ),
     )
     yield
     await engine.dispose()

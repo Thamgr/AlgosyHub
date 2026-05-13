@@ -17,7 +17,5 @@ class Problem(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     difficulty: Mapped[int | None]
-    time_limit_ms: Mapped[int | None]
-    memory_limit_mb: Mapped[int | None]
-    cf_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    external_url: Mapped[str] = mapped_column(String(500), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

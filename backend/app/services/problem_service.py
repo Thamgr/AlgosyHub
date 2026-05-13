@@ -25,9 +25,7 @@ async def import_problem(
         title=data.title,
         tags=data.tags,
         difficulty=data.difficulty,
-        time_limit_ms=data.time_limit_ms,
-        memory_limit_mb=data.memory_limit_mb,
-        cf_url=data.cf_url,
+        external_url=data.external_url,
     )
 
 

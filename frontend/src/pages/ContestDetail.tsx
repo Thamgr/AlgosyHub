@@ -93,7 +93,7 @@ export default function ContestDetail() {
                   <td className="px-4 py-3 font-mono text-gray-400 w-8">{letters[i]}</td>
                   <td className="px-4 py-3">
                     <a
-                      href={p.cf_url}
+                      href={`${import.meta.env.VITE_API_URL ?? ""}/api/v1/problems/${p.id}/statement`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-blue-600 hover:underline"

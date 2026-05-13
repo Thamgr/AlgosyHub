@@ -74,16 +74,17 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column(
             "external_source",
-            sa.Enum("codeforces", name="externalsource", create_type=True),
+            sa.Enum(
+                "codeforces", "informatics", "leetcode",
+                name="externalsource", create_type=True,
+            ),
             nullable=False,
         ),
         sa.Column("external_id", sa.String(50), nullable=False),
         sa.Column("title", sa.String(500), nullable=False),
         sa.Column("tags", sa.JSON, nullable=False, server_default="[]"),
         sa.Column("difficulty", sa.Integer),
-        sa.Column("time_limit_ms", sa.Integer),
-        sa.Column("memory_limit_mb", sa.Integer),
-        sa.Column("cf_url", sa.String(500), nullable=False),
+        sa.Column("external_url", sa.String(500), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

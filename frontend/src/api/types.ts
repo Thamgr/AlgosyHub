@@ -13,7 +13,7 @@ export interface TokenResponse {
 }
 
 export type ContestStatus = "draft" | "running" | "finished";
-export type ExternalSource = "codeforces";
+export type ExternalSource = "codeforces" | "informatics" | "leetcode";
 export type SubmissionVerdict =
   | "pending"
   | "running"
@@ -32,9 +32,7 @@ export interface Problem {
   title: string;
   tags: string[];
   difficulty: number | null;
-  time_limit_ms: number | null;
-  memory_limit_mb: number | null;
-  cf_url: string;
+  external_url: string;
 }
 
 export interface Group {
