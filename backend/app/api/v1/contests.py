@@ -1,9 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends
+from sqlalchemy import select
 
 from app.core.deps import CurrentUserID, SessionDep, require_role
 from app.models.enums import ContestStatus, UserRole
+from app.models.user import User
 from app.schemas.contest import AddProblemRequest, ContestCreate, ContestResponse
 from app.schemas.problem import ProblemResponse
 from app.services import contest_service
@@ -14,13 +16,16 @@ TeacherDep = Annotated[int, Depends(require_role(UserRole.teacher))]
 
 
 @router.get("", response_model=list[ContestResponse])
-async def list_contests(session: SessionDep, teacher_id: TeacherDep, group_id: int | None = None):
+async def list_contests(
+    session: SessionDep,
+    user_id: CurrentUserID,
+    group_id: int | None = None,
+):
     if group_id is not None:
         return await contest_service.list_contests_for_group(session, group_id)
-    from sqlalchemy import select
-    from app.models.contest import Contest
-    result = await session.execute(select(Contest).where(Contest.teacher_id == teacher_id))
-    return list(result.scalars().all())
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one()
+    return await contest_service.list_contests_for_user(session, user_id, user.role)
 
 
 @router.post("", response_model=ContestResponse, status_code=201)

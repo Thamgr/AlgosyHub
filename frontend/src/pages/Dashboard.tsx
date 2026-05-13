@@ -12,39 +12,11 @@ export default function Dashboard() {
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [contests, setContests] = useState<Contest[]>([]);
-  const [groupName, setGroupName] = useState("");
-  const [contestTitle, setContestTitle] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     groupsApi.list().then(setGroups);
-    if (isTeacher) {
-      contestsApi.listMine().then(setContests);
-    }
-  }, [isTeacher]);
-
-  async function handleCreateGroup(e: React.FormEvent) {
-    e.preventDefault();
-    if (!groupName.trim()) return;
-    try {
-      const group = await groupsApi.create({ name: groupName.trim() });
-      setGroups((prev) => [...prev, group]);
-      setGroupName("");
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Ошибка");
-    }
-  }
-
-  async function handleCreateContest(e: React.FormEvent) {
-    e.preventDefault();
-    if (!contestTitle.trim()) return;
-    try {
-      const contest = await contestsApi.create({ title: contestTitle.trim() });
-      navigate(`/contests/${contest.id}`);
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Ошибка");
-    }
-  }
+    contestsApi.list().then(setContests);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -66,13 +38,22 @@ export default function Dashboard() {
 
       <main className="p-6 max-w-2xl mx-auto space-y-8">
 
-        {/* Группы */}
         <section>
-          <h2 className="text-sm font-medium text-gray-700 mb-2">Группы</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-medium text-gray-700">Группы</h2>
+            {isTeacher && (
+              <Link
+                to="/groups/new"
+                className="px-3 py-1 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
+              >
+                + Создать группу
+              </Link>
+            )}
+          </div>
           {groups.length === 0 ? (
             <p className="text-sm text-gray-400">Нет групп</p>
           ) : (
-            <div className="border rounded divide-y mb-3">
+            <div className="border rounded divide-y">
               {groups.map((g) => (
                 <Link
                   key={g.id}
@@ -85,62 +66,37 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-          {isTeacher && (
-            <form onSubmit={handleCreateGroup} className="flex gap-2">
-              <input
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Название группы"
-                className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
-              >
-                Создать
-              </button>
-            </form>
-          )}
         </section>
 
-        {/* Контесты учителя */}
-        {isTeacher && (
-          <section>
-            <h2 className="text-sm font-medium text-gray-700 mb-2">Мои контесты</h2>
-            {contests.length === 0 ? (
-              <p className="text-sm text-gray-400">Нет контестов</p>
-            ) : (
-              <div className="border rounded divide-y mb-3">
-                {contests.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/contests/${c.id}`}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
-                  >
-                    <span className="text-sm font-medium">{c.title}</span>
-                    <span className="text-xs text-gray-400">{c.status}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-            <form onSubmit={handleCreateContest} className="flex gap-2">
-              <input
-                value={contestTitle}
-                onChange={(e) => setContestTitle(e.target.value)}
-                placeholder="Название контеста"
-                className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-medium text-gray-700">Контесты</h2>
+            {isTeacher && (
+              <Link
+                to="/contests/new"
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
               >
-                Создать
-              </button>
-            </form>
-          </section>
-        )}
-
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+                + Создать контест
+              </Link>
+            )}
+          </div>
+          {contests.length === 0 ? (
+            <p className="text-sm text-gray-400">Нет контестов</p>
+          ) : (
+            <div className="border rounded divide-y">
+              {contests.map((c) => (
+                <Link
+                  key={c.id}
+                  to={`/contests/${c.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                >
+                  <span className="text-sm font-medium">{c.title}</span>
+                  <span className="text-xs text-gray-400">{c.status}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

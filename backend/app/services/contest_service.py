@@ -39,6 +39,15 @@ async def list_contests_for_group(session: AsyncSession, group_id: int) -> list[
     return await ContestRepository(session).get_by_group(group_id)
 
 
+async def list_contests_for_user(
+    session: AsyncSession, user_id: int, role: str
+) -> list[Contest]:
+    repo = ContestRepository(session)
+    if role == "teacher":
+        return await repo.get_by_teacher(user_id)
+    return await repo.get_for_user(user_id)
+
+
 async def assign_group(
     session: AsyncSession, contest_id: int, teacher_id: int, group_id: int | None
 ) -> Contest:

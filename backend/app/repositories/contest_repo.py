@@ -2,6 +2,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contest import Contest, contest_problems
+from app.models.group import group_members
 from app.models.problem import Problem
 from app.repositories.base import BaseRepository
 
@@ -12,6 +13,21 @@ class ContestRepository(BaseRepository[Contest]):
     async def get_by_group(self, group_id: int) -> list[Contest]:
         result = await self.session.execute(
             select(Contest).where(Contest.group_id == group_id)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_teacher(self, teacher_id: int) -> list[Contest]:
+        result = await self.session.execute(
+            select(Contest).where(Contest.teacher_id == teacher_id)
+        )
+        return list(result.scalars().all())
+
+    async def get_for_user(self, user_id: int) -> list[Contest]:
+        """Контесты, доступные студенту через группы, в которых он состоит."""
+        result = await self.session.execute(
+            select(Contest)
+            .join(group_members, group_members.c.group_id == Contest.group_id)
+            .where(group_members.c.user_id == user_id)
         )
         return list(result.scalars().all())
 

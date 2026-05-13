@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { contestsApi } from "../api/contests";
+import { getApiError } from "../api/errors";
 import { useAuthStore } from "../store/auth";
 import type { Contest, Problem } from "../api/types";
 
@@ -29,8 +30,8 @@ export default function ContestDetail() {
       const problem = await contestsApi.addProblem(contestId, input.trim().toUpperCase());
       setProblems((prev) => [...prev, problem]);
       setInput("");
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Ошибка добавления задачи");
+    } catch (err: unknown) {
+      setError(getApiError(err, "Ошибка добавления задачи"));
     } finally {
       setLoading(false);
     }

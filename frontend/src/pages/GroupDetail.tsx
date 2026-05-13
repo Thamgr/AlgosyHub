@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
 import { useAuthStore } from "../store/auth";
 import type { Contest, Group, User } from "../api/types";
@@ -31,8 +32,8 @@ export default function GroupDetail() {
       const updated = await groupsApi.getMembers(groupId);
       setMembers(updated);
       setUsername("");
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Ошибка");
+    } catch (err: unknown) {
+      setError(getApiError(err));
     }
   }
 

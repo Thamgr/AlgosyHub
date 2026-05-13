@@ -4,11 +4,19 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import ContestDetail from "./pages/ContestDetail";
+import CreateContest from "./pages/CreateContest";
+import CreateGroup from "./pages/CreateGroup";
 import GroupDetail from "./pages/GroupDetail";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
   if (!token) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequireTeacher({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (user?.role !== "teacher") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -23,7 +31,15 @@ export default function Router() {
           <RequireAuth>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route
+                path="/groups/new"
+                element={<RequireTeacher><CreateGroup /></RequireTeacher>}
+              />
               <Route path="/groups/:id" element={<GroupDetail />} />
+              <Route
+                path="/contests/new"
+                element={<RequireTeacher><CreateContest /></RequireTeacher>}
+              />
               <Route path="/contests/:id" element={<ContestDetail />} />
             </Routes>
           </RequireAuth>

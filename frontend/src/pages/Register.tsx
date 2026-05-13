@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/client";
+import { getApiError } from "../api/errors";
 import { useAuthStore } from "../store/auth";
 import type { TokenResponse, User, UserRole } from "../api/types";
 
@@ -34,8 +35,8 @@ export default function Register() {
       const { data: user } = await api.get<User>("/api/v1/auth/me");
       setUser(user);
       navigate("/");
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Ошибка регистрации");
+    } catch (err: unknown) {
+      setError(getApiError(err, "Ошибка регистрации"));
     } finally {
       setLoading(false);
     }
