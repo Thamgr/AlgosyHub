@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { useAuthStore } from "../store/auth";
@@ -54,7 +54,8 @@ export default function ContestDetail() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <Link to="/" className="text-sm text-gray-400 hover:underline">← Назад</Link>
+      <div className="flex items-center justify-between mb-4 mt-1">
         <div>
           <h1 className="text-xl font-semibold">{contest.title}</h1>
           <span className="text-xs text-gray-400">{contest.status}</span>
