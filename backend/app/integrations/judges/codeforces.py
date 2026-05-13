@@ -9,6 +9,7 @@ from typing import Any
 
 import codeforcespy.processors
 import httpx
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from app.integrations.judges.base import JudgeAdapter, ProblemData, SubmissionResult
 from app.models.enums import SubmissionVerdict
@@ -72,19 +73,57 @@ CF_VERDICT_MAP = {
 }
 
 
-_CSRF_RE = re.compile(
-    r'name=["\']X-Csrf-Token["\']\s+content=["\']([0-9a-f]+)["\']', re.IGNORECASE
+_CSRF_META_TAG_RE = re.compile(
+    r'<meta\s[^>]*name=["\']X-Csrf-Token["\'][^>]*>', re.IGNORECASE
 )
+_CONTENT_ATTR_RE = re.compile(r'content=["\']([^"\']+)["\']', re.IGNORECASE)
 _CSRF_INPUT_RE = re.compile(
-    r'name=["\']csrf_token["\']\s+value=["\']([0-9a-f]+)["\']', re.IGNORECASE
+    r'name=["\']csrf_token["\']\s+value=["\']([^"\']+)["\']', re.IGNORECASE
 )
 
 
 def _extract_csrf(html: str) -> str:
-    m = _CSRF_RE.search(html) or _CSRF_INPUT_RE.search(html)
+    m = _CSRF_META_TAG_RE.search(html)
+    if m:
+        attr = _CONTENT_ATTR_RE.search(m.group(0))
+        if attr:
+            return attr.group(1)
+    m2 = _CSRF_INPUT_RE.search(html)
+    if m2:
+        return m2.group(1)
+    raise RuntimeError("Could not extract CSRF token from Codeforces page")
+
+
+# Codeforces периодически защищает страницы JS-челленджем (RCPC): сначала
+# приходит маленький HTML c вызовами `toNumbers("…")` и `slowAES.decrypt(...)`,
+# который в браузере вычисляет cookie `RCPC` и перезагружает страницу.
+# Эмулируем эту проверку: AES-128-CBC расшифровка трёх hex-аргументов даёт
+# значение cookie, которое нужно поставить и повторить запрос.
+_RCPC_RE = re.compile(
+    r'toNumbers\("([0-9a-f]+)"\).*?'
+    r'toNumbers\("([0-9a-f]+)"\).*?'
+    r'toNumbers\("([0-9a-f]+)"\)',
+    re.DOTALL,
+)
+
+
+def _solve_rcpc(html: str) -> str | None:
+    if "slowAES" not in html and "toNumbers(" not in html:
+        return None
+    m = _RCPC_RE.search(html)
     if not m:
-        raise RuntimeError("Could not extract CSRF token from Codeforces page")
-    return m.group(1)
+        logger.warning(
+            "Codeforces returned an RCPC-like page that does not match the "
+            "expected toNumbers(...) pattern; cannot bypass automatically"
+        )
+        return None
+    key = bytes.fromhex(m.group(1))
+    iv = bytes.fromhex(m.group(2))
+    ct = bytes.fromhex(m.group(3))
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    pt = decryptor.update(ct) + decryptor.finalize()
+    return pt.hex()
 
 
 def _rand_ftaa() -> str:
@@ -147,6 +186,27 @@ class CodeforcesAdapter(JudgeAdapter):
             self._locks[contest_id] = lock
         return lock
 
+    async def _ensure_rcpc(self, response: httpx.Response) -> bool:
+        """Если CF прислал RCPC-челлендж, ставит cookie и возвращает True."""
+        rcpc = _solve_rcpc(response.text)
+        if not rcpc:
+            return False
+        self._http.cookies.set("RCPC", rcpc, domain="codeforces.com", path="/")
+        logger.info("Solved Codeforces RCPC challenge")
+        return True
+
+    async def _web_get(self, url: str, **kwargs: Any) -> httpx.Response:
+        r = await self._http.get(url, **kwargs)
+        if await self._ensure_rcpc(r):
+            r = await self._http.get(url, **kwargs)
+        return r
+
+    async def _web_post(self, url: str, **kwargs: Any) -> httpx.Response:
+        r = await self._http.post(url, **kwargs)
+        if await self._ensure_rcpc(r):
+            r = await self._http.post(url, **kwargs)
+        return r
+
     async def _fetch_contest_problems(self, contest_id: int) -> list[dict[str, Any]]:
         # CF requires this call to be fully anonymous with no extra params,
         # otherwise it returns: "Non-gym contest standings for non-admin users
@@ -204,11 +264,11 @@ class CodeforcesAdapter(JudgeAdapter):
             if self._logged_in:
                 return
 
-            r = await self._http.get(f"{CF_BASE}/enter")
+            r = await self._web_get(f"{CF_BASE}/enter")
             r.raise_for_status()
             csrf = _extract_csrf(r.text)
 
-            r2 = await self._http.post(
+            r2 = await self._web_post(
                 f"{CF_BASE}/enter",
                 data={
                     "csrf_token": csrf,
@@ -264,11 +324,11 @@ class CodeforcesAdapter(JudgeAdapter):
         async with self._submit_lock:
             before_id = await self._latest_submission_id()
 
-            r = await self._http.get(f"{CF_BASE}/problemset/submit")
+            r = await self._web_get(f"{CF_BASE}/problemset/submit")
             r.raise_for_status()
             csrf = _extract_csrf(r.text)
 
-            resp = await self._http.post(
+            resp = await self._web_post(
                 f"{CF_BASE}/problemset/submit?csrf_token={csrf}",
                 data={
                     "csrf_token": csrf,
