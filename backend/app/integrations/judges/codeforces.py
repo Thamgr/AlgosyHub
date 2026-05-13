@@ -394,7 +394,9 @@ class CodeforcesAdapter(JudgeAdapter):
             csrf = _extract_csrf(r.text)
 
             # Формат заимствован из рабочего https://github.com/Nirlep5252/codeforces-cli/blob/main/cf/submit.py
-            # — contest-specific URL + submittedProblemIndex + contestId.
+            # — contest-specific URL + submittedProblemIndex (lowercase!) + contestId.
+            # CF тихо отбрасывает форму, если index в верхнем регистре, потому что
+            # <option value="..."> в дропдауне всегда lowercase ("a", "b", "f2", …).
             resp = await self._web_post(
                 f"{submit_page}?csrf_token={csrf}",
                 data={
@@ -402,7 +404,7 @@ class CodeforcesAdapter(JudgeAdapter):
                     "ftaa": "",
                     "bfaa": "",
                     "action": "submitSolutionFormSubmitted",
-                    "submittedProblemIndex": index,
+                    "submittedProblemIndex": index.lower(),
                     "programTypeId": str(program_type_id),
                     "contestId": str(contest_id),
                     "source": source_to_send,
@@ -416,8 +418,30 @@ class CodeforcesAdapter(JudgeAdapter):
             if err:
                 raise RuntimeError(f"Codeforces rejected submission: {err}")
 
-            # После успешного submit CF редиректит на /problemset/status.
-            # Опрашиваем user.status, пока id не изменится — это наша посылка.
+            # CF после успешного submit редиректит на /contest/{id}/my.
+            # Если этого не случилось — форма была отвергнута без видимой ошибки
+            # (rate-limit, дублёр кода, неверный язык, etc.). Не ждём 10 секунд
+            # впустую, сразу логируем подсказку и фейлим.
+            final_url = str(resp.url)
+            success_prefix = f"{CF_BASE}/contest/{contest_id}/my"
+            if not final_url.startswith(success_prefix):
+                hint = _diagnose_submit_failure(resp.text)
+                logger.warning(
+                    "Submit form was not redirected to %s.\n"
+                    "  final URL: %s\n  hint: %s\n  HTML head: %s",
+                    success_prefix,
+                    final_url,
+                    hint or "(no recognised phrase)",
+                    resp.text[:500].replace("\n", " "),
+                )
+                raise RuntimeError(
+                    f"Codeforces did not accept submission (no redirect to /my). "
+                    f"Final URL: {final_url}. "
+                    f"{('Reason: ' + hint) if hint else 'Check backend logs for HTML dump.'}"
+                )
+
+            logger.info("Submit posted; final URL=%s; latest_before=%s", final_url, before_id)
+
             for _ in range(20):
                 latest = await self._latest_submission_id()
                 if latest is not None and latest != before_id:
@@ -425,8 +449,8 @@ class CodeforcesAdapter(JudgeAdapter):
                 await asyncio.sleep(0.5)
 
             raise RuntimeError(
-                "Codeforces accepted the form but the new submission did not "
-                "appear in user.status within 10 seconds"
+                "Codeforces redirected to /my but the new submission did not "
+                "appear in user.status within 10 seconds (this should not happen)"
             )
 
     async def poll_verdict(self, external_submission_id: str) -> SubmissionResult:
@@ -473,4 +497,30 @@ def _extract_submit_error(html: str) -> str | None:
     m = _ERROR_RE.search(html)
     if m:
         return m.group(1).strip()
+    return None
+
+
+# Список фраз, которые CF выводит на странице submit-формы при «тихом» отказе
+# (без <span class="error">). Берём кусок html вокруг найденной фразы — этого
+# хватает, чтобы понять причину при отладке.
+_FAILURE_HINTS = (
+    "you have submitted exactly the same code before",
+    "you can submit at most",
+    "you can submit no more than",
+    "you are not allowed to submit",
+    "you have not chosen a programming language",
+    "choose a problem",
+    "choose a valid",
+    "wrong submission",
+    "try again",
+    "please wait",
+)
+
+
+def _diagnose_submit_failure(html: str) -> str | None:
+    lc = html.lower()
+    for phrase in _FAILURE_HINTS:
+        idx = lc.find(phrase)
+        if idx != -1:
+            return html[max(0, idx - 30): idx + 200].strip()
     return None
