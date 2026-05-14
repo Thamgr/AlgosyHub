@@ -44,7 +44,8 @@ export interface Group {
 
 export interface Contest {
   id: number;
-  group_id: number;
+  group_id: number | null;
+  group_ids: number[];
   title: string;
   status: ContestStatus;
   starts_at: string | null;
@@ -68,4 +69,32 @@ export interface JudgeAccount {
   source: ExternalSource;
   handle: string;
   updated_at: string;
+}
+
+export interface ScoreboardCell {
+  problem_id: number;
+  attempts: number;
+  accepted: boolean;
+  first_accepted_at: string | null;
+}
+
+export interface ScoreboardRow {
+  user_id: number;
+  username: string;
+  solved: number;
+  attempts_total: number;
+  cells: ScoreboardCell[];
+}
+
+export interface Scoreboard {
+  problem_ids: number[];
+  rows: ScoreboardRow[];
+}
+
+export interface ProblemHints {
+  problem_id: number;
+  hint1: string;
+  hint2: string;
+  hint3: string;
+  cached: boolean;
 }

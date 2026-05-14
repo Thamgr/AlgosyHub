@@ -43,7 +43,11 @@ export default function Dashboard() {
 
         <section>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-medium text-gray-700">Группы</h2>
+            <h2 className="text-sm font-medium text-gray-700">
+              <Link to="/groups" className="hover:underline">
+                Группы
+              </Link>
+            </h2>
             {isTeacher && (
               <Link
                 to="/groups/new"
@@ -57,7 +61,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-400">Нет групп</p>
           ) : (
             <div className="border rounded divide-y">
-              {groups.map((g) => (
+              {groups.slice(0, 5).map((g) => (
                 <Link
                   key={g.id}
                   to={`/groups/${g.id}`}
@@ -69,18 +73,34 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+          {groups.length > 5 && (
+            <Link
+              to="/groups"
+              className="block mt-2 text-xs text-blue-600 hover:underline"
+            >
+              Показать все ({groups.length}) →
+            </Link>
+          )}
         </section>
 
         <section>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-medium text-gray-700">Контесты</h2>
             {isTeacher && (
-              <Link
-                to="/contests/new"
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-              >
-                + Создать контест
-              </Link>
+              <div className="flex gap-2">
+                <Link
+                  to="/contests/match"
+                  className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                >
+                  ⚡ Автоподбор
+                </Link>
+                <Link
+                  to="/contests/new"
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  + Создать контест
+                </Link>
+              </div>
             )}
           </div>
           {contests.length === 0 ? (

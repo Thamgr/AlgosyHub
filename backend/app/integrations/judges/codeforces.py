@@ -65,6 +65,9 @@ class CodeforcesAdapter(JudgeAdapter):
         )
         self._contest_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
         self._locks: dict[int, asyncio.Lock] = {}
+        # Cache for the full problemset (≈ 5MB JSON, rarely changes).
+        self._problemset_cache: dict[str, tuple[float, list[ProblemData]]] = {}
+        self._problemset_lock = asyncio.Lock()
 
     def _lock_for(self, contest_id: int) -> asyncio.Lock:
         lock = self._locks.get(contest_id)
@@ -117,6 +120,58 @@ class CodeforcesAdapter(JudgeAdapter):
             difficulty=match.get("rating"),
             external_url=f"{CF_BASE}/problemset/problem/{contest_id}/{index}",
         )
+
+    async def fetch_problemset(
+        self, tags: list[str] | None = None
+    ) -> list[ProblemData]:
+        """Fetch the public CF problemset, optionally filtered by tags.
+
+        CF accepts a semicolon-separated ``tags`` param and returns problems
+        whose tag list contains *all* of them. The full payload is ~5MB so
+        callers should keep this cached for at least a few minutes.
+        """
+        cache_key = ";".join(sorted(t.strip() for t in (tags or []) if t.strip()))
+        async with self._problemset_lock:
+            cached = self._problemset_cache.get(cache_key)
+            if cached and time.monotonic() - cached[0] < _CONTEST_TTL:
+                return cached[1]
+
+            params: dict[str, str] = {}
+            if cache_key:
+                params["tags"] = cache_key
+
+            try:
+                resp = await self._http.get(
+                    f"{CF_API}/problemset.problems", params=params
+                )
+            except httpx.HTTPError as e:
+                raise RuntimeError(f"CF API request failed: {e}") from e
+
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"CF API HTTP {resp.status_code}: {resp.text[:200]}"
+                )
+            data = resp.json()
+            if data.get("status") != "OK":
+                raise RuntimeError(f"CF API error: {data.get('comment')}")
+
+            out: list[ProblemData] = []
+            for p in data["result"]["problems"]:
+                contest_id = p.get("contestId")
+                index = p.get("index")
+                if not contest_id or not index:
+                    continue
+                out.append(
+                    ProblemData(
+                        external_id=f"{contest_id}{index}",
+                        title=p["name"],
+                        tags=list(p.get("tags") or []),
+                        difficulty=p.get("rating"),
+                        external_url=f"{CF_BASE}/problemset/problem/{contest_id}/{index}",
+                    )
+                )
+            self._problemset_cache[cache_key] = (time.monotonic(), out)
+            return out
 
     def submit_url(self, contest_external_id: str, problem_index: str) -> str | None:
         # На странице /contest/{id}/submit можно предзаполнить выбор задачи

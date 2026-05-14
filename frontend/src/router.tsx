@@ -6,7 +6,10 @@ import Dashboard from "./pages/Dashboard";
 import ContestDetail from "./pages/ContestDetail";
 import CreateContest from "./pages/CreateContest";
 import CreateGroup from "./pages/CreateGroup";
+import Groups from "./pages/Groups";
 import GroupDetail from "./pages/GroupDetail";
+import MatchContest from "./pages/MatchContest";
+import ProblemDetail from "./pages/ProblemDetail";
 import Profile from "./pages/Profile";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -32,6 +35,7 @@ export default function Router() {
           <RequireAuth>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/groups" element={<Groups />} />
               <Route
                 path="/groups/new"
                 element={<RequireTeacher><CreateGroup /></RequireTeacher>}
@@ -41,7 +45,12 @@ export default function Router() {
                 path="/contests/new"
                 element={<RequireTeacher><CreateContest /></RequireTeacher>}
               />
+              <Route
+                path="/contests/match"
+                element={<RequireTeacher><MatchContest /></RequireTeacher>}
+              />
               <Route path="/contests/:id" element={<ContestDetail />} />
+              <Route path="/problems/:id" element={<ProblemDetail />} />
               <Route path="/profile" element={<Profile />} />
             </Routes>
           </RequireAuth>

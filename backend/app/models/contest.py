@@ -14,6 +14,17 @@ contest_problems = Table(
     Column("order_index", Integer, nullable=False, default=0),
 )
 
+# Groups attached to a contest. A user gets access to the contest iff one of
+# these groups contains the user (or the user is the contest's teacher).
+# Groups here play the role of "tags" — a contest may be exposed to several
+# overlapping cohorts at once.
+contest_groups = Table(
+    "contest_groups",
+    Base.metadata,
+    Column("contest_id", ForeignKey("contests.id", ondelete="CASCADE"), primary_key=True),
+    Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Contest(Base):
     __tablename__ = "contests"

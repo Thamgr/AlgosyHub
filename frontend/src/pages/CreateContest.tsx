@@ -17,7 +17,7 @@ const SOURCES: { value: ExternalSource; label: string }[] = [
 export default function CreateContest() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
-  const [groupId, setGroupId] = useState<string>("");
+  const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [groups, setGroups] = useState<Group[]>([]);
   const [problems, setProblems] = useState<ProblemRow[]>([
     { source: "codeforces", externalId: "" },
@@ -29,6 +29,15 @@ export default function CreateContest() {
   useEffect(() => {
     groupsApi.list().then(setGroups);
   }, []);
+
+  function toggleGroup(id: number) {
+    setSelectedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function updateProblem(index: number, patch: Partial<ProblemRow>) {
     setProblems((prev) =>
@@ -53,7 +62,7 @@ export default function CreateContest() {
     try {
       const contest = await contestsApi.create({
         title: title.trim(),
-        group_id: groupId ? Number(groupId) : undefined,
+        group_ids: Array.from(selectedGroups),
       });
 
       const cleaned = problems
@@ -101,18 +110,40 @@ export default function CreateContest() {
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              Группа <span className="text-gray-400 font-normal">(опционально)</span>
+              Группы-теги{" "}
+              <span className="text-gray-400 font-normal">
+                (кому виден контест; можно несколько)
+              </span>
             </label>
-            <select
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">— Не привязан к группе —</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
+            {groups.length === 0 ? (
+              <p className="text-sm text-gray-400">
+                Сначала{" "}
+                <Link to="/groups/new" className="text-blue-600 hover:underline">
+                  создайте группу
+                </Link>
+                . Контест без групп не будет виден студентам.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {groups.map((g) => {
+                  const on = selectedGroups.has(g.id);
+                  return (
+                    <button
+                      type="button"
+                      key={g.id}
+                      onClick={() => toggleGroup(g.id)}
+                      className={`px-3 py-1 rounded text-xs border ${
+                        on
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-blue-400"
+                      }`}
+                    >
+                      {g.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>

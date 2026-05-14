@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
+from app.api.v1.contests import _to_responses
 from app.core.deps import CurrentUser, CurrentUserID, SessionDep, require_role
 from app.models.enums import UserRole
 from app.schemas.auth import UserResponse
@@ -49,7 +50,8 @@ async def add_member(
 
 @router.get("/{group_id}/contests", response_model=list[ContestResponse])
 async def list_group_contests(group_id: int, session: SessionDep, _: CurrentUserID):
-    return await contest_service.list_contests_for_group(session, group_id)
+    contests = await contest_service.list_contests_for_group(session, group_id)
+    return await _to_responses(session, contests)
 
 
 @router.delete("/{group_id}/members/{user_id}", status_code=204)

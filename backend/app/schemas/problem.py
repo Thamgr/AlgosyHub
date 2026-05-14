@@ -13,3 +13,15 @@ class ProblemResponse(BaseModel):
     external_url: str
 
     model_config = {"from_attributes": True}
+
+
+class ProblemHintsResponse(BaseModel):
+    problem_id: int
+    hint1: str
+    hint2: str
+    hint3: str
+    cached: bool
+
+
+class CFTagsResponse(BaseModel):
+    tags: list[str]
