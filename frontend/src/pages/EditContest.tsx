@@ -34,6 +34,9 @@ export default function EditContest() {
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
 
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   useEffect(() => {
     if (Number.isNaN(contestId)) {
       setNotFound(true);
@@ -101,6 +104,25 @@ export default function EditContest() {
       setProblems((prev) => prev.filter((p) => p.id !== problemId));
     } catch (err: unknown) {
       setError(getApiError(err, "Не удалось удалить задачу"));
+    }
+  }
+
+  async function handleDelete() {
+    if (!contest) return;
+    const ok = window.confirm(
+      `Удалить контест «${contest.title}»? Это действие необратимо. ` +
+        `Состав задач и привязка к группам будут удалены; ` +
+        `посылки участников сохранятся в их истории, но потеряют связь с контестом.`,
+    );
+    if (!ok) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await contestsApi.remove(contestId);
+      navigate("/");
+    } catch (err: unknown) {
+      setDeleteError(getApiError(err, "Не удалось удалить контест"));
+      setDeleting(false);
     }
   }
 
@@ -310,6 +332,28 @@ export default function EditContest() {
             </button>
             {savedAt && !isDirty && (
               <span className="text-xs text-gray-400">Сохранено</span>
+            )}
+          </div>
+
+          <div className="border-t pt-6">
+            <h2 className="text-sm font-medium text-red-700 mb-1">
+              Опасная зона
+            </h2>
+            <p className="text-xs text-gray-500 mb-3">
+              Удаление контеста необратимо. Задачи и привязки к группам
+              исчезнут вместе с контестом; посылки участников останутся в их
+              истории, но потеряют связь с контестом.
+            </p>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-4 py-2 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
+            >
+              {deleting ? "Удаление..." : "Удалить контест"}
+            </button>
+            {deleteError && (
+              <p className="text-red-500 text-sm mt-2">{deleteError}</p>
             )}
           </div>
         </div>

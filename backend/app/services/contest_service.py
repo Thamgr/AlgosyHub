@@ -197,6 +197,24 @@ async def update_contest(
     return contest
 
 
+async def delete_contest(
+    session: AsyncSession, contest_id: int, teacher_id: int
+) -> None:
+    """Delete a contest owned by ``teacher_id``.
+
+    ``contest_problems`` and ``contest_groups`` rows are removed via FK
+    cascade; ``submissions.contest_id`` is SET NULL so submission history
+    survives the contest.
+    """
+    repo = ContestRepository(session)
+    contest = await repo.get(contest_id)
+    if not contest:
+        raise AppError("Contest not found", 404)
+    if contest.teacher_id != teacher_id:
+        raise AppError("Forbidden", 403)
+    await repo.delete(contest)
+
+
 async def remove_problem(
     session: AsyncSession, contest_id: int, teacher_id: int, problem_id: int
 ) -> None:

@@ -121,6 +121,14 @@ async def remove_problem(
     await session.commit()
 
 
+@router.delete("/{contest_id}", status_code=204)
+async def delete_contest(
+    contest_id: int, session: SessionDep, teacher_id: TeacherDep
+):
+    await contest_service.delete_contest(session, contest_id, teacher_id)
+    await session.commit()
+
+
 @router.patch("/{contest_id}", response_model=ContestResponse)
 async def update_contest(
     contest_id: int,

@@ -63,6 +63,9 @@ export const contestsApi = {
   update: (id: number, data: UpdateContestData) =>
     api.patch<Contest>(`/api/v1/contests/${id}`, data).then((r) => r.data),
 
+  remove: (id: number) =>
+    api.delete<void>(`/api/v1/contests/${id}`).then((r) => r.data),
+
   updateGroups: (id: number, group_ids: number[]) =>
     api
       .put<Contest>(`/api/v1/contests/${id}/groups`, { group_ids })
