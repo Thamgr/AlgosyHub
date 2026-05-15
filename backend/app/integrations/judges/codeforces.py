@@ -178,13 +178,16 @@ class CodeforcesAdapter(JudgeAdapter):
         return lock
 
     async def _fetch_contest_problems(self, contest_id: int) -> list[dict[str, Any]]:
-        # CF requires this call to be fully anonymous with no extra params,
-        # otherwise it returns: "Non-gym contest standings for non-admin users
-        # are available only via anonymous GET requests with no extra parameters".
+        # Анонимам CF разрешает звать contest.standings только без
+        # method-specific фильтров (`from`/`count`/`handles`/...), иначе
+        # отвечает "Non-gym contest standings for non-admin users are
+        # available only via anonymous GET requests with no extra
+        # parameters". Глобальный параметр `lang` под это ограничение
+        # не подпадает — он применим ко всем методам API.
         try:
             resp = await self._http.get(
                 f"{CF_API}/contest.standings",
-                params={"contestId": contest_id},
+                params={"contestId": contest_id, "lang": "ru"},
             )
         except httpx.HTTPError as e:
             raise RuntimeError(f"CF API request failed: {e}") from e
@@ -237,7 +240,7 @@ class CodeforcesAdapter(JudgeAdapter):
             if cached and time.monotonic() - cached[0] < _CONTEST_TTL:
                 return cached[1]
 
-            params: dict[str, str] = {}
+            params: dict[str, str] = {"lang": "ru"}
             if cache_key:
                 params["tags"] = cache_key
 
