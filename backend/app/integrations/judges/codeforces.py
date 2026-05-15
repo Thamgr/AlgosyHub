@@ -32,6 +32,104 @@ def _parse_external_id(external_id: str) -> tuple[int, str]:
     return int(m.group(1)), m.group(2)
 
 
+_CF_STATEMENT_TEMPLATE = """<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base href="{base}/">
+<title>{title}</title>
+<script>
+window.MathJax = {{
+  tex: {{
+    inlineMath: [['$$$', '$$$']],
+    displayMath: [['$$$$', '$$$$']]
+  }},
+  svg: {{ fontCache: 'global' }}
+}};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    color: #1f2328;
+    line-height: 1.55;
+    margin: 0;
+    padding: 20px;
+    background: #fff;
+  }}
+  .problem-statement {{ max-width: 880px; margin: 0 auto; }}
+  .problem-statement .header {{
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    text-align: center;
+  }}
+  .problem-statement .header .title {{
+    font-size: 1.5em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }}
+  .problem-statement .header > div:not(.title) {{
+    font-size: 0.9em;
+    color: #57606a;
+    line-height: 1.7;
+  }}
+  .problem-statement .header .property-title {{
+    font-weight: 500;
+    color: #1f2328;
+    margin-right: 4px;
+  }}
+  .problem-statement .section-title {{
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 22px 0 8px;
+  }}
+  .problem-statement p {{ margin: 8px 0; }}
+  .problem-statement pre {{
+    background: #f6f8fa;
+    padding: 10px 14px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+      Consolas, monospace;
+    font-size: 0.92em;
+    line-height: 1.45;
+    white-space: pre;
+  }}
+  .problem-statement table {{
+    border-collapse: collapse;
+    margin: 8px 0;
+  }}
+  .problem-statement table th,
+  .problem-statement table td {{
+    border: 1px solid #d0d7de;
+    padding: 4px 8px;
+  }}
+  .problem-statement .sample-tests .title {{
+    font-weight: 600;
+    padding: 6px 0;
+  }}
+  .problem-statement img {{ max-width: 100%; }}
+  .problem-statement ul,
+  .problem-statement ol {{ padding-left: 1.4em; }}
+  .problem-statement .note {{
+    background: #fff8e1;
+    border-left: 3px solid #facc15;
+    padding: 8px 14px;
+    margin-top: 14px;
+    border-radius: 0 6px 6px 0;
+  }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
 CF_VERDICT_MAP = {
     "OK": SubmissionVerdict.accepted,
     "WRONG_ANSWER": SubmissionVerdict.wrong_answer,
@@ -175,6 +273,43 @@ class CodeforcesAdapter(JudgeAdapter):
                 )
             self._problemset_cache[cache_key] = (time.monotonic(), out)
             return out
+
+    async def render_statement_html(self, problem: "Problem") -> str:
+        """Возвращает чистую страницу только с блоком условия задачи.
+
+        Дефолтная реализация в `JudgeAdapter` отдаёт полную страницу CF (с
+        шапкой, сайдбаром, футером, формой логина и т.д.), и в iframe она
+        выглядит как «условие где-то далеко внизу». Здесь мы вырезаем
+        ровно `div.problem-statement`, оборачиваем в минимальный HTML и
+        подключаем MathJax с CF-делимитерами `$$$...$$$`, чтобы формулы
+        рендерились так же, как на самом CF.
+        """
+        try:
+            resp = await self._http.get(problem.external_url)
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"CF statement fetch failed: {e}") from e
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"CF statement HTTP {resp.status_code} for {problem.external_url}"
+            )
+
+        try:
+            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
+        except ImportError:
+            # Без bs4 не можем вырезать блок — отдаём дефолтную реализацию
+            # (полная страница + <base href>).
+            return await super().render_statement_html(problem)
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        block = soup.select_one("div.problem-statement")
+        if block is None:
+            return await super().render_statement_html(problem)
+
+        return _CF_STATEMENT_TEMPLATE.format(
+            base=CF_BASE,
+            title=f"{problem.external_id} — {problem.title}",
+            body=str(block),
+        )
 
     async def fetch_statement_text(self, problem: "Problem") -> str | None:
         """Extract the plain-text problem statement from the CF page.
