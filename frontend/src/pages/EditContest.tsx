@@ -323,13 +323,6 @@ export default function EditContest() {
             >
               {saving ? "Сохранение..." : "Сохранить"}
             </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/contests/${contestId}`)}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Готово
-            </button>
             {savedAt && !isDirty && (
               <span className="text-xs text-gray-400">Сохранено</span>
             )}

@@ -159,6 +159,15 @@ export default function ContestDetail() {
     return Array.from(needed).filter((s) => !connectedSources.has(s));
   }, [isTeacher, problems, connectedSources]);
 
+  const solvedProblemIds = useMemo(() => {
+    if (isTeacher) return new Set<number>();
+    return new Set(
+      submissions
+        .filter((s) => s.verdict === "accepted")
+        .map((s) => s.problem_id),
+    );
+  }, [isTeacher, submissions]);
+
   async function handleAddProblem(e: React.FormEvent) {
     e.preventDefault();
     if (!addInput.trim()) return;
@@ -279,6 +288,7 @@ export default function ContestDetail() {
           problems={problems}
           contest={contest}
           isTeacher={isTeacher}
+          solvedProblemIds={solvedProblemIds}
           addInput={addInput}
           setAddInput={setAddInput}
           addError={addError}
@@ -338,6 +348,7 @@ function ProblemsTab({
   problems,
   contest,
   isTeacher,
+  solvedProblemIds,
   addInput,
   setAddInput,
   addError,
@@ -347,6 +358,7 @@ function ProblemsTab({
   problems: Problem[];
   contest: Contest;
   isTeacher: boolean;
+  solvedProblemIds: Set<number>;
   addInput: string;
   setAddInput: (s: string) => void;
   addError: string;
@@ -361,33 +373,50 @@ function ProblemsTab({
         ) : (
           <table className="w-full text-sm">
             <tbody>
-              {problems.map((p, i) => (
-                <tr
-                  key={p.id}
-                  className="border-b last:border-0 hover:bg-gray-50"
-                >
-                  <td className="px-4 py-3 font-mono text-gray-400 w-8">
-                    {LETTERS[i]}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/problems/${p.id}?contest=${contest.id}`}
-                      className="text-blue-600 hover:underline"
+              {problems.map((p, i) => {
+                const solved = solvedProblemIds.has(p.id);
+                return (
+                  <tr
+                    key={p.id}
+                    className={
+                      "border-b last:border-0 " +
+                      (solved
+                        ? "bg-green-50 hover:bg-green-100"
+                        : "hover:bg-gray-50")
+                    }
+                  >
+                    <td
+                      className={
+                        "px-4 py-3 font-mono w-8 " +
+                        (solved ? "text-green-700" : "text-gray-400")
+                      }
                     >
-                      {p.title}
-                    </Link>
-                    <div className="text-xs text-gray-400">
-                      {getJudgeLabel(p.external_source)} · {p.external_id}
-                      {p.tags.length > 0 && (
-                        <> · {p.tags.join(", ")}</>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 w-16">
-                    {p.difficulty ?? "—"}
-                  </td>
-                </tr>
-              ))}
+                      {LETTERS[i]}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/problems/${p.id}?contest=${contest.id}`}
+                        className={
+                          solved
+                            ? "text-green-700 hover:underline"
+                            : "text-blue-600 hover:underline"
+                        }
+                      >
+                        {p.title}
+                      </Link>
+                      <div className="text-xs text-gray-400">
+                        {getJudgeLabel(p.external_source)} · {p.external_id}
+                        {p.tags.length > 0 && (
+                          <> · {p.tags.join(", ")}</>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 w-16">
+                      {p.difficulty ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
