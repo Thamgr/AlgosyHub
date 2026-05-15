@@ -12,12 +12,21 @@ async def import_problem(
     external_id: str,
 ) -> Problem:
     repo = ProblemRepository(session)
+    # Быстрая проверка по тому, что ввёл юзер. Для CF этого достаточно
+    # (фронт делает `.toUpperCase()`), для Информатикса работает, если
+    # ввели чистый chapterid. Если ввели URL — нормализованное значение
+    # совпадёт только после adapter.fetch_problem; тогда сверим ещё раз.
     existing = await repo.get_by_external(source, external_id.upper())
     if existing:
         return existing
 
     adapter = registry.get(source)
     data = await adapter.fetch_problem(external_id)
+
+    if data.external_id != external_id.upper():
+        existing = await repo.get_by_external(source, data.external_id)
+        if existing:
+            return existing
 
     return await repo.create(
         external_source=source,

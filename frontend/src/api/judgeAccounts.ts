@@ -28,4 +28,12 @@ export const JUDGE_SOURCES: {
     placeholder: "tourist",
     helpUrl: "https://codeforces.com/profile",
   },
+  {
+    source: "informatics",
+    label: "Информатикс",
+    // Информатикс идентифицирует пользователя числовым user_id
+    // (виден в URL /submits/view.php?user_id=355608, а не как nickname).
+    placeholder: "355608 (user_id)",
+    helpUrl: "https://informatics.msk.ru/user/profile.php",
+  },
 ];

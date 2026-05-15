@@ -14,6 +14,7 @@ from app.core.database import engine
 from app.core.exceptions import register_exception_handlers
 from app.integrations.judges import registry
 from app.integrations.judges.codeforces import CodeforcesAdapter
+from app.integrations.judges.informatics import InformaticsAdapter
 from app.models.enums import ExternalSource
 from app.workers.submission_poller import create_scheduler
 
@@ -21,6 +22,7 @@ from app.workers.submission_poller import create_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     registry.register(ExternalSource.codeforces, CodeforcesAdapter())
+    registry.register(ExternalSource.informatics, InformaticsAdapter())
     scheduler = create_scheduler()
     scheduler.start()
     try:

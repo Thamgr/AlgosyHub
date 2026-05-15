@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     CF_API_KEY: str = ""
     CF_API_SECRET: str = ""
 
+    # Учётка-наблюдатель на informatics.msk.ru. Сама платформа на Информатикс
+    # ничего не сдаёт — этот аккаунт нужен только чтобы получить cookie
+    # сессии Moodle и через неё дёргать /py/problem/0/filter-runs (без авторизации
+    # эндпойнт отдаёт ``Not authorized``). Если креды пустые, поллер
+    # тихо проскакивает Информатикс — задачи всё равно можно импортировать,
+    # т.к. условия публичны.
+    INFORMATICS_USERNAME: str = ""
+    INFORMATICS_PASSWORD: str = ""
+
     # Универсальный OpenAI-совместимый клиент. Подходит и для самого
     # OpenAI, и для Yandex Cloud Foundation Models, и для других
     # совместимых провайдеров — отличаются только base_url, имя модели
