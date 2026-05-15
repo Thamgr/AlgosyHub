@@ -102,3 +102,12 @@ class JudgeAdapter(ABC):
         parsed = urlparse(problem.external_url)
         base = f"{parsed.scheme}://{parsed.netloc}/"
         return _inject_base(resp.text, base)
+
+    async def fetch_statement_text(self, problem: "Problem") -> str | None:
+        """Return the problem statement as plain text (for LLM prompts).
+
+        Override per-judge to extract just the condition / IO specs / examples
+        (no nav, no header). Default returns ``None`` so callers can fall back
+        to passing only metadata to the model.
+        """
+        return None

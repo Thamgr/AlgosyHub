@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
+from app.integrations.judges import registry
 from app.integrations.llm.base import LLMClient
 from app.integrations.llm.openai_client import make_default_client
 from app.models.problem import Problem
@@ -27,28 +28,65 @@ from app.models.problem_hint import ProblemHint
 
 logger = logging.getLogger(__name__)
 
+# Жёсткий лимит на длину условия, которое уйдёт в LLM. Контекст
+# DeepSeek-v32/Qwen3 даёт >100K, но реально условия CF редко больше
+# 6-8K, а очень длинные тексты только увеличивают стоимость и таймаут.
+_STATEMENT_MAX_CHARS = 8000
+
 SYSTEM_PROMPT = (
     "Ты опытный тренер по спортивному программированию. Тебе дают задачу с "
-    "Codeforces и просят придумать три уровня подсказок:\n"
+    "соревновательного судьи (например Codeforces) и просят придумать три "
+    "уровня подсказок:\n"
     "1) Лёгкая подсказка: только направление мысли, без раскрытия идеи.\n"
     "2) Средняя подсказка: ключевая алгоритмическая идея и структуры данных, "
     "   но без готового кода.\n"
     "3) Полное решение: подробный алгоритм со сложностью и (если уместно) "
     "   псевдокодом. Это уровень «сдаюсь».\n"
+    "Подсказки должны быть основаны строго на условии задачи, которое тебе "
+    "дадут — не выдумывай ограничения и не предлагай решения для другой задачи. "
     "Каждая подсказка — отдельный шаг, не повторяй предыдущие. "
     "Отвечай только валидным JSON вида {\"hint1\": \"...\", \"hint2\": \"...\", \"hint3\": \"...\"}. "
     "Подсказки на русском языке."
 )
 
 
-def _build_user_prompt(problem: Problem) -> str:
-    return (
+async def _fetch_statement_text(problem: Problem) -> str | None:
+    """Best-effort fetch of the full statement text via the judge adapter."""
+    try:
+        adapter = registry.get(problem.external_source)
+    except KeyError:
+        return None
+    try:
+        text = await adapter.fetch_statement_text(problem)
+    except Exception:
+        logger.exception(
+            "Failed to fetch statement text for problem %s", problem.id
+        )
+        return None
+    if not text:
+        return None
+    if len(text) > _STATEMENT_MAX_CHARS:
+        text = text[:_STATEMENT_MAX_CHARS] + "\n\n[...условие обрезано...]"
+    return text
+
+
+def _build_user_prompt(problem: Problem, statement: str | None) -> str:
+    head = (
         f"Задача: {problem.title}\n"
         f"Источник: {problem.external_source.value} {problem.external_id}\n"
         f"Сложность: {problem.difficulty or 'не указана'}\n"
         f"Теги: {', '.join(problem.tags) if problem.tags else '—'}\n"
-        f"Условие: см. {problem.external_url}\n\n"
-        "Сгенерируй три подсказки в JSON-формате, как описано в системном сообщении."
+        f"Ссылка: {problem.external_url}\n"
+    )
+    if statement:
+        body = f"\nПолное условие задачи:\n\"\"\"\n{statement}\n\"\"\"\n"
+    else:
+        body = (
+            "\nТекст условия не удалось загрузить — опирайся на название, "
+            "теги и сложность, и явно скажи в подсказках, что они общие.\n"
+        )
+    return head + body + (
+        "\nСгенерируй три подсказки в JSON-формате, как описано в системном сообщении."
     )
 
 
@@ -105,10 +143,11 @@ async def get_or_generate(
     if problem is None:
         raise AppError("Problem not found", 404)
 
+    statement = await _fetch_statement_text(problem)
     raw = await _get_llm().chat(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_prompt(problem)},
+            {"role": "user", "content": _build_user_prompt(problem, statement)},
         ]
     )
     hint1, hint2, hint3 = _parse_hints(raw)

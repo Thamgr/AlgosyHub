@@ -3,12 +3,15 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from app.integrations.judges.base import ExternalSubmission, JudgeAdapter, ProblemData
 from app.models.enums import SubmissionVerdict
+
+if TYPE_CHECKING:
+    from app.models.problem import Problem
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,41 @@ class CodeforcesAdapter(JudgeAdapter):
                 )
             self._problemset_cache[cache_key] = (time.monotonic(), out)
             return out
+
+    async def fetch_statement_text(self, problem: "Problem") -> str | None:
+        """Extract the plain-text problem statement from the CF page.
+
+        CF рендерит условие в ``<div class="problem-statement">``: внутри —
+        заголовок (название/лимиты/IO), параграфы, спецификации входа/выхода,
+        примеры и заметка. Берём весь текст этого блока и нормализуем
+        переносы строк, чтобы было удобно вставлять в LLM-промпт.
+        """
+        try:
+            resp = await self._http.get(problem.external_url)
+        except httpx.HTTPError as e:
+            logger.warning("CF statement fetch failed: %s", e)
+            return None
+        if resp.status_code != 200:
+            logger.warning(
+                "CF statement HTTP %s for %s", resp.status_code, problem.external_url
+            )
+            return None
+
+        # bs4 импорт ленивый — на случай, если кому-то нужно поднять
+        # бекенд без LLM-стека вообще.
+        try:
+            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
+        except ImportError:
+            logger.warning("beautifulsoup4 not installed, can't extract CF statement")
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        block = soup.select_one("div.problem-statement")
+        if block is None:
+            return None
+        text = block.get_text("\n", strip=True)
+        # Свёрстаем последовательные пустые строки в одну.
+        return re.sub(r"\n{3,}", "\n\n", text)
 
     def submit_url(self, contest_external_id: str, problem_index: str) -> str | None:
         # На странице /contest/{id}/submit можно предзаполнить выбор задачи

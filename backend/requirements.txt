@@ -12,3 +12,4 @@ codeforcespy>=1.2.1
 apscheduler>=3.10.0
 openai>=1.66.0
 python-multipart>=0.0.9
+beautifulsoup4>=4.12.0
