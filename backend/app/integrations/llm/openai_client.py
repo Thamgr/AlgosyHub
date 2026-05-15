@@ -67,7 +67,8 @@ class OpenAIClient(LLMClient):
         resp = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,
-            temperature=0.4,
+            temperature=0.1,
+            reasoning_effort="none"
         )
         return resp.choices[0].message.content or ""
 
