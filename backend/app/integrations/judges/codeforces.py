@@ -283,9 +283,14 @@ class CodeforcesAdapter(JudgeAdapter):
         ровно `div.problem-statement`, оборачиваем в минимальный HTML и
         подключаем MathJax с CF-делимитерами `$$$...$$$`, чтобы формулы
         рендерились так же, как на самом CF.
+
+        Запрашиваем русскую локаль (`?locale=ru`) — у большинства задач
+        CF есть русский перевод, и наша аудитория русскоязычная.
         """
         try:
-            resp = await self._http.get(problem.external_url)
+            resp = await self._http.get(
+                problem.external_url, params={"locale": "ru"}
+            )
         except httpx.HTTPError as e:
             raise RuntimeError(f"CF statement fetch failed: {e}") from e
         if resp.status_code != 200:
@@ -318,9 +323,14 @@ class CodeforcesAdapter(JudgeAdapter):
         заголовок (название/лимиты/IO), параграфы, спецификации входа/выхода,
         примеры и заметка. Берём весь текст этого блока и нормализуем
         переносы строк, чтобы было удобно вставлять в LLM-промпт.
+
+        Просим русскую локаль (`?locale=ru`), чтобы LLM работала с тем же
+        текстом, на котором потом будет генерироваться русская подсказка.
         """
         try:
-            resp = await self._http.get(problem.external_url)
+            resp = await self._http.get(
+                problem.external_url, params={"locale": "ru"}
+            )
         except httpx.HTTPError as e:
             logger.warning("CF statement fetch failed: %s", e)
             return None
