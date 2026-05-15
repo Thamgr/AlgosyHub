@@ -64,57 +64,43 @@ export default function ProblemDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="p-6 max-w-5xl mx-auto grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <Link to={backHref} className="text-sm text-gray-400 hover:underline">
-            ← Назад
-          </Link>
-          <div>
-            <h1 className="text-2xl font-semibold">{problem.title}</h1>
-            <div className="text-xs text-gray-500 mt-1">
-              {getJudgeLabel(problem.external_source)} · {problem.external_id}
-              {problem.difficulty != null && (
-                <> · сложность {problem.difficulty}</>
-              )}
-            </div>
-            {problem.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {problem.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
+      <main className="p-6 max-w-5xl mx-auto space-y-4">
+        <Link to={backHref} className="text-sm text-gray-400 hover:underline">
+          ← Назад
+        </Link>
+        <div>
+          <h1 className="text-2xl font-semibold">{problem.title}</h1>
+          <div className="text-xs text-gray-500 mt-1">
+            {getJudgeLabel(problem.external_source)} · {problem.external_id}
+            {problem.difficulty != null && (
+              <> · сложность {problem.difficulty}</>
             )}
           </div>
+          {problem.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {problem.tags.map((t) => (
+                <span
+                  key={t}
+                  className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
 
-          <div className="border rounded bg-white p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-gray-500">
-                Условие проксируется с сайта судьи. Если что-то отображается криво —
-                откройте оригинал в новой вкладке.
-              </p>
-              <div className="flex gap-2 shrink-0">
-                <a
-                  href={statementUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
-                >
-                  Открыть условие ↗
-                </a>
-                <a
-                  href={submitUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                >
-                  Сдать на {getJudgeLabel(problem.external_source)} ↗
-                </a>
-              </div>
+        <div className="grid lg:grid-cols-3 gap-6 items-start">
+          <div className="lg:col-span-2 border rounded bg-white p-4 space-y-3">
+            <div className="flex items-center justify-end gap-2">
+              <a
+                href={submitUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              >
+                Сдать на {getJudgeLabel(problem.external_source)} ↗
+              </a>
             </div>
             <iframe
               src={statementUrl}
@@ -123,10 +109,8 @@ export default function ProblemDetail() {
               sandbox="allow-same-origin allow-popups allow-scripts"
             />
           </div>
-        </div>
 
-        <aside className="space-y-3">
-          <div className="border rounded bg-white p-4">
+          <aside className="border rounded bg-white p-4">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold">AI-подсказки</h2>
               {hints && isTeacher && (
@@ -184,8 +168,8 @@ export default function ProblemDetail() {
                 />
               </div>
             )}
-          </div>
-        </aside>
+          </aside>
+        </div>
       </main>
     </div>
   );
