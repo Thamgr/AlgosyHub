@@ -7,7 +7,7 @@ import type { TokenResponse, User } from "../api/types";
 export default function Login() {
   const navigate = useNavigate();
   const { setToken, setUser } = useAuthStore();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ export default function Login() {
     setLoading(true);
     try {
       const { data: token } = await api.post<TokenResponse>("/api/v1/auth/login", {
-        email,
+        username,
         password,
       });
       setToken(token.access_token);
@@ -26,7 +26,7 @@ export default function Login() {
       setUser(user);
       navigate("/");
     } catch {
-      setError("Неверный email или пароль");
+      setError("Неверный логин или пароль");
     } finally {
       setLoading(false);
     }
@@ -38,12 +38,13 @@ export default function Login() {
         <h1 className="text-2xl font-bold mb-6">AlgosyHub</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium mb-1">Логин</label>
             <input
-              type="email"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -51,6 +52,7 @@ export default function Login() {
             <label className="block text-sm font-medium mb-1">Пароль</label>
             <input
               type="password"
+              autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}

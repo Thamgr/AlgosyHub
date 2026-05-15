@@ -1,17 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from app.models.enums import UserRole
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
     username: str
     password: str
     role: UserRole
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
@@ -22,7 +21,6 @@ class TokenResponse(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    email: str
     username: str
     role: UserRole
 

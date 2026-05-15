@@ -9,7 +9,6 @@ export default function Register() {
   const navigate = useNavigate();
   const { setToken, setUser } = useAuthStore();
   const [form, setForm] = useState({
-    email: "",
     username: "",
     password: "",
     role: "student" as UserRole,
@@ -28,7 +27,7 @@ export default function Register() {
     try {
       await api.post("/api/v1/auth/register", form);
       const { data: token } = await api.post<TokenResponse>("/api/v1/auth/login", {
-        email: form.email,
+        username: form.username,
         password: form.password,
       });
       setToken(token.access_token);
@@ -48,19 +47,10 @@ export default function Register() {
         <h1 className="text-2xl font-bold mb-6">Регистрация</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Username</label>
+            <label className="block text-sm font-medium mb-1">Логин</label>
             <input
               type="text"
+              autoComplete="username"
               required
               value={form.username}
               onChange={(e) => set("username", e.target.value)}
@@ -71,6 +61,7 @@ export default function Register() {
             <label className="block text-sm font-medium mb-1">Пароль</label>
             <input
               type="password"
+              autoComplete="new-password"
               required
               value={form.password}
               onChange={(e) => set("password", e.target.value)}

@@ -2,7 +2,6 @@ export type UserRole = "student" | "teacher";
 
 export interface User {
   id: number;
-  email: string;
   username: string;
   role: UserRole;
 }

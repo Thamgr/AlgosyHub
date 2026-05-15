@@ -10,7 +10,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(body: RegisterRequest, session: SessionDep):
     user = await auth_service.register(
-        session, body.email, body.username, body.password, body.role
+        session, body.username, body.password, body.role
     )
     await session.commit()
     return user
@@ -18,7 +18,7 @@ async def register(body: RegisterRequest, session: SessionDep):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, session: SessionDep):
-    token = await auth_service.login(session, body.email, body.password)
+    token = await auth_service.login(session, body.username, body.password)
     return TokenResponse(access_token=token)
 
 

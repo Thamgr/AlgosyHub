@@ -8,19 +8,15 @@ from app.models.user import User
 
 async def register(
     session: AsyncSession,
-    email: str,
     username: str,
     password: str,
     role: str,
 ) -> User:
-    existing = await session.execute(
-        select(User).where((User.email == email) | (User.username == username))
-    )
+    existing = await session.execute(select(User).where(User.username == username))
     if existing.scalar_one_or_none():
-        raise AppError("Email или username уже занят", 409)
+        raise AppError("Username уже занят", 409)
 
     user = User(
-        email=email,
         username=username,
         hashed_password=hash_password(password),
         role=role,
@@ -31,11 +27,11 @@ async def register(
     return user
 
 
-async def login(session: AsyncSession, email: str, password: str) -> str:
-    result = await session.execute(select(User).where(User.email == email))
+async def login(session: AsyncSession, username: str, password: str) -> str:
+    result = await session.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(password, user.hashed_password):
-        raise AppError("Неверный email или пароль", 401)
+        raise AppError("Неверный логин или пароль", 401)
     return create_access_token(user.id)
 
 
