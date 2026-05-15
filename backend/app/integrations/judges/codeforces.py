@@ -178,16 +178,18 @@ class CodeforcesAdapter(JudgeAdapter):
         return lock
 
     async def _fetch_contest_problems(self, contest_id: int) -> list[dict[str, Any]]:
-        # Анонимам CF разрешает звать contest.standings только без
-        # method-specific фильтров (`from`/`count`/`handles`/...), иначе
-        # отвечает "Non-gym contest standings for non-admin users are
+        # Анонимам CF разрешает звать contest.standings только с одним
+        # параметром `contestId` — буквально "exactly one query parameter".
+        # Любой другой параметр (включая безобидный `lang`) приводит к
+        # HTTP 400 "Non-gym contest standings for non-admin users are
         # available only via anonymous GET requests with no extra
-        # parameters". Глобальный параметр `lang` под это ограничение
-        # не подпадает — он применим ко всем методам API.
+        # parameters". Поэтому имена задач здесь возвращаются на языке
+        # оригинала контеста (часто английский), и локализовать их позже
+        # негде — это компромисс ради работающего анонимного доступа.
         try:
             resp = await self._http.get(
                 f"{CF_API}/contest.standings",
-                params={"contestId": contest_id, "lang": "ru"},
+                params={"contestId": contest_id},
             )
         except httpx.HTTPError as e:
             raise RuntimeError(f"CF API request failed: {e}") from e
