@@ -15,8 +15,11 @@ class Settings(BaseSettings):
 
     # Универсальный OpenAI-совместимый клиент. Подходит и для самого
     # OpenAI, и для Yandex Cloud Foundation Models, и для других
-    # совместимых провайдеров — отличаются только base_url, идентификатор
-    # модели и (опционально) project (он же folder_id у Яндекса).
+    # совместимых провайдеров — отличаются только base_url, имя модели
+    # и (опционально) project (он же folder_id у Яндекса). Если задан
+    # OPENAI_PROJECT, его значение используется и как заголовок
+    # ``OpenAI-Project``, и как префикс URI модели вида
+    # ``gpt://<project>/<model>``.
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_BASE_URL: str = ""

@@ -6,9 +6,11 @@ Foundation Models, и для любого другого OpenAI-совмести
 
 * ``OPENAI_API_KEY`` — токен;
 * ``OPENAI_BASE_URL`` — базовый URL (пусто = OpenAI по умолчанию);
-* ``OPENAI_MODEL`` — имя/URI модели (для Яндекса: ``gpt://<folder>/<model>``);
-* ``OPENAI_PROJECT`` — необязательный заголовок ``OpenAI-Project``
-  (для Яндекса сюда кладут folder_id).
+* ``OPENAI_MODEL`` — имя модели (например ``gpt-4o-mini`` или
+  ``deepseek-v32/latest``);
+* ``OPENAI_PROJECT`` — необязательный заголовок ``OpenAI-Project``;
+  для Яндекса сюда кладут folder_id, и тогда финальный идентификатор
+  модели автоматически собирается в URI ``gpt://<project>/<model>``.
 """
 
 from __future__ import annotations
@@ -22,6 +24,20 @@ from app.integrations.llm.base import LLMClient
 logger = logging.getLogger(__name__)
 
 
+def _resolve_model_id(model: str, project: str) -> str:
+    """Build the actual model identifier sent to the provider.
+
+    Если пользователь уже передал полный URI (``gpt://...``) — оставляем
+    как есть. Иначе при наличии ``project`` оборачиваем имя модели в
+    URI Яндекса ``gpt://<project>/<model>``. Без project — просто имя.
+    """
+    if "://" in model:
+        return model
+    if project:
+        return f"gpt://{project}/{model}"
+    return model
+
+
 class OpenAIClient(LLMClient):
     def __init__(
         self,
@@ -30,7 +46,7 @@ class OpenAIClient(LLMClient):
         base_url: str = "",
         project: str = "",
     ) -> None:
-        self._model = model
+        self._model = _resolve_model_id(model, project)
         # Импорт здесь, чтобы зависимость требовалась только при реальном
         # использовании клиента.
         from openai import AsyncOpenAI  # type: ignore[import-not-found]
