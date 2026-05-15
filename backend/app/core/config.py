@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_BASE_URL: str = ""
     OPENAI_PROJECT: str = ""
+    # Таймаут одного LLM-запроса, секунд. По умолчанию SDK ждёт 600 с,
+    # это слишком долго — снаружи nginx и так упадёт раньше. Явный
+    # короткий таймаут даёт понятную ошибку в логах.
+    OPENAI_TIMEOUT: float = 90.0
 
     # Comma-separated list of allowed CORS origins.
     # Use "*" to allow any origin (sets allow_origin_regex=".*" under the hood).

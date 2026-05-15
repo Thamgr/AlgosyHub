@@ -45,13 +45,14 @@ class OpenAIClient(LLMClient):
         model: str,
         base_url: str = "",
         project: str = "",
+        timeout: float = 90.0,
     ) -> None:
         self._model = _resolve_model_id(model, project)
         # Импорт здесь, чтобы зависимость требовалась только при реальном
         # использовании клиента.
         from openai import AsyncOpenAI  # type: ignore[import-not-found]
 
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": timeout}
         if base_url:
             kwargs["base_url"] = base_url
         if project:
@@ -99,6 +100,7 @@ def make_default_client() -> LLMClient:
                 model=settings.OPENAI_MODEL,
                 base_url=settings.OPENAI_BASE_URL,
                 project=settings.OPENAI_PROJECT,
+                timeout=settings.OPENAI_TIMEOUT,
             )
         except Exception:
             logger.exception("Failed to initialise OpenAI client, falling back to stub")
