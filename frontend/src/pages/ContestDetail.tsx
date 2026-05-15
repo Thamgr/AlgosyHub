@@ -10,7 +10,6 @@ import { getJudgeLabel, getJudgeSubmitUrl } from "../lib/judgeUrls";
 import type {
   Contest,
   ExternalSource,
-  Group,
   JudgeAccount,
   Problem,
   Scoreboard,
