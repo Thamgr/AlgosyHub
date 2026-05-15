@@ -17,6 +17,99 @@ logger = logging.getLogger(__name__)
 
 INF_BASE = "https://informatics.msk.ru"
 
+
+_INF_STATEMENT_TEMPLATE = """<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base href="{base}/">
+<title>{title}</title>
+<script>
+window.MathJax = {{
+  tex: {{
+    inlineMath: [['\\\\(', '\\\\)']],
+    displayMath: [['\\\\[', '\\\\]']]
+  }},
+  svg: {{ fontCache: 'global' }}
+}};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    color: #1f2328;
+    line-height: 1.55;
+    margin: 0;
+    padding: 20px;
+    background: #fff;
+  }}
+  .title {{
+    font-size: 1.5em;
+    font-weight: 600;
+    margin: 0 0 10px;
+    text-align: center;
+  }}
+  .limits {{
+    text-align: center;
+    color: #57606a;
+    font-size: 0.9em;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 14px;
+  }}
+  .problem-statement {{ max-width: 880px; margin: 0 auto; }}
+  .problem-statement p {{ margin: 8px 0; }}
+  .problem-statement .legend {{ margin-bottom: 14px; }}
+  .problem-statement .section-title {{
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 22px 0 8px;
+  }}
+  .problem-statement pre {{
+    background: #f6f8fa;
+    padding: 10px 14px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+      Consolas, monospace;
+    font-size: 0.92em;
+    line-height: 1.45;
+    white-space: pre;
+    margin: 0;
+  }}
+  .problem-statement table {{ border-collapse: collapse; margin: 8px 0; }}
+  .problem-statement table th,
+  .problem-statement table td {{
+    border: 1px solid #d0d7de;
+    padding: 4px 8px;
+  }}
+  .problem-statement img {{ max-width: 100%; }}
+  .problem-statement ul,
+  .problem-statement ol {{ padding-left: 1.4em; }}
+  .sample-tests .sample-test {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 8px 0;
+  }}
+  .sample-tests .sample-test .title {{
+    font-weight: 600;
+    padding: 4px 0;
+  }}
+  @media (max-width: 640px) {{
+    .sample-tests .sample-test {{ grid-template-columns: 1fr; }}
+  }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
 # Маппинг кодов вердиктов ejudge → наш `SubmissionVerdict`. Источник —
 # `submits/js/module.js` (`statuses_map` + список селектов): 0=OK, 1=CE, 2=RE,
 # 3=TL, 4=PE, 5=WA, 6=CF (check failed), 7=Partial, 8=AC (зачтено вручную),
@@ -181,6 +274,70 @@ class InformaticsAdapter(JudgeAdapter):
         if m:
             return m.group(1).strip()
         return raw
+
+    async def render_statement_html(self, problem: "Problem") -> str:
+        """Возвращает чистую страницу только с условием задачи.
+
+        Дефолт `JudgeAdapter.render_statement_html` отдаёт всю страницу
+        Информатикса целиком — а это полная тема Moodle с навигацией,
+        сайдбаром, футером и кучей JS, ради которого условие тонет где-то
+        в середине iframe. Здесь делаем то же, что и для CF: вырезаем
+        ровно блоки с условием (`div.problem-statement`) + заголовок и
+        блок «Ограничения», и оборачиваем в минимальный шаблон с
+        MathJax-делимитерами `\\(...\\)` и `\\[...\\]`, как у самого
+        Информатикса.
+        """
+        try:
+            resp = await self._http.get(problem.external_url)
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"Informatics statement fetch failed: {e}") from e
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Informatics statement HTTP {resp.status_code} for "
+                f"{problem.external_url}"
+            )
+
+        try:
+            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
+        except ImportError:
+            # Без bs4 не вырежем кусок — отдадим дефолтную полную страницу.
+            return await super().render_statement_html(problem)
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        body_parts: list[str] = []
+        h2 = soup.find("h2")
+        if h2 and h2.get_text(strip=True):
+            body_parts.append(f"<h1 class='title'>{h2.decode_contents()}</h1>")
+
+        # Лимиты времени/памяти — на оригинальной странице в сайдбаре,
+        # здесь подаём отдельной строкой над условием.
+        for sec in soup.select("section.block_statements_menu"):
+            title_el = sec.find(class_="card-title")
+            body_el = sec.find(class_="card-text")
+            if not title_el or not body_el:
+                continue
+            if "Ограничения" in title_el.get_text(strip=True):
+                limits = _inline_text(body_el)
+                if limits:
+                    body_parts.append(
+                        f"<div class='limits'><b>Ограничения:</b> {limits}</div>"
+                    )
+                break
+
+        blocks = soup.select("div.problem-statement")
+        if not blocks:
+            # Не нашли — лучше отдать полную страницу с <base href>,
+            # чем пустоту.
+            return await super().render_statement_html(problem)
+        for block in blocks:
+            body_parts.append(str(block))
+
+        return _INF_STATEMENT_TEMPLATE.format(
+            base=INF_BASE,
+            title=f"{problem.external_id} — {problem.title}",
+            body="\n".join(body_parts),
+        )
 
     async def fetch_statement_text(self, problem: "Problem") -> str | None:
         """Plain-text условие задачи для подсказчика-LLM.
