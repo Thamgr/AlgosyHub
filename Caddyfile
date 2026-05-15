@@ -1,0 +1,13 @@
+algosy.thamgr.space {
+	encode zstd gzip
+
+	reverse_proxy frontend:80 {
+		# /api/* у фронтенда внутри уже проксируется на backend:8000,
+		# поэтому достаточно одного апстрима. Таймауты под LLM-запросы.
+		transport http {
+			dial_timeout 10s
+			response_header_timeout 120s
+			read_timeout 120s
+		}
+	}
+}
