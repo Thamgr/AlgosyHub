@@ -46,10 +46,8 @@ class OpenAIClient(LLMClient):
         base_url: str = "",
         project: str = "",
         timeout: float = 90.0,
-        reasoning_mode: str = "",
     ) -> None:
         self._model = _resolve_model_id(model, project)
-        self._reasoning_mode = reasoning_mode.strip().upper()
         # Импорт здесь, чтобы зависимость требовалась только при реальном
         # использовании клиента.
         from openai import AsyncOpenAI  # type: ignore[import-not-found]
@@ -66,17 +64,10 @@ class OpenAIClient(LLMClient):
         # каждый совместимый провайдер. Структуру JSON просим в
         # системном промпте, а парсер на стороне сервиса умеет
         # деградировать на нестрогий ответ.
-        extra_body: dict[str, Any] = {}
-        if self._reasoning_mode:
-            # Управление reasoning у Yandex Cloud (DeepSeek-v3.2 и др.).
-            # В нативном API это `reasoningOptions.mode`, через
-            # OpenAI-совместимый эндпоинт пробрасываем как extra_body.
-            extra_body["reasoning_options"] = {"mode": self._reasoning_mode}
         resp = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,
             temperature=0.4,
-            extra_body=extra_body or None,
         )
         return resp.choices[0].message.content or ""
 
@@ -110,7 +101,6 @@ def make_default_client() -> LLMClient:
                 base_url=settings.OPENAI_BASE_URL,
                 project=settings.OPENAI_PROJECT,
                 timeout=settings.OPENAI_TIMEOUT,
-                reasoning_mode=settings.OPENAI_REASONING_MODE,
             )
         except Exception:
             logger.exception("Failed to initialise OpenAI client, falling back to stub")
