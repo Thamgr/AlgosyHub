@@ -3,16 +3,16 @@ import { Link, useNavigate } from "react-router-dom";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
+import {
+  JUDGE_PROBLEM_SOURCES,
+  getProblemSourcePlaceholder,
+} from "../lib/judgeUrls";
 import type { ExternalSource, Group } from "../api/types";
 
 interface ProblemRow {
   source: ExternalSource;
   externalId: string;
 }
-
-const SOURCES: { value: ExternalSource; label: string }[] = [
-  { value: "codeforces", label: "Codeforces" },
-];
 
 export default function CreateContest() {
   const navigate = useNavigate();
@@ -175,14 +175,14 @@ export default function CreateContest() {
                     }
                     className="border rounded px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {SOURCES.map((s) => (
+                    {JUDGE_PROBLEM_SOURCES.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
                   </select>
                   <input
                     value={p.externalId}
                     onChange={(e) => updateProblem(i, { externalId: e.target.value })}
-                    placeholder="например: 654B"
+                    placeholder={getProblemSourcePlaceholder(p.source)}
                     className="flex-1 border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   {problems.length > 1 && (
@@ -198,8 +198,11 @@ export default function CreateContest() {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Пока поддерживается только Codeforces. ID задачи в формате
-              <span className="font-mono"> contestId + index</span> (например, <span className="font-mono">1900A</span>).
+              Codeforces — id в формате{" "}
+              <span className="font-mono">contestId + index</span> (
+              <span className="font-mono">1900A</span>). Информатикс —{" "}
+              <span className="font-mono">chapterid</span> со страницы условия (
+              <span className="font-mono">10</span>).
             </p>
           </div>
 

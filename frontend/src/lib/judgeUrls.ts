@@ -1,4 +1,26 @@
-import type { Problem } from "../api/types";
+import type { ExternalSource, Problem } from "../api/types";
+
+/**
+ * Источники, из которых учитель может добавить задачу в контест.
+ * Используется и в `CreateContest`, и в `EditContest`, чтобы список
+ * вариантов и их плейсхолдеры жили в одном месте.
+ */
+export const JUDGE_PROBLEM_SOURCES: {
+  value: ExternalSource;
+  label: string;
+  placeholder: string;
+}[] = [
+  { value: "codeforces", label: "Codeforces", placeholder: "например: 654B" },
+  {
+    value: "informatics",
+    label: "Информатикс",
+    placeholder: "например: 10 (chapterid)",
+  },
+];
+
+export function getProblemSourcePlaceholder(source: ExternalSource): string {
+  return JUDGE_PROBLEM_SOURCES.find((s) => s.value === source)?.placeholder ?? "";
+}
 
 /**
  * Возвращает URL формы сдачи у внешнего судьи для конкретной задачи.

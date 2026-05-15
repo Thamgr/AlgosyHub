@@ -3,21 +3,12 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
-import { getJudgeLabel } from "../lib/judgeUrls";
+import {
+  JUDGE_PROBLEM_SOURCES,
+  getJudgeLabel,
+  getProblemSourcePlaceholder,
+} from "../lib/judgeUrls";
 import type { Contest, ExternalSource, Group, Problem } from "../api/types";
-
-const SOURCES: {
-  value: ExternalSource;
-  label: string;
-  placeholder: string;
-}[] = [
-  { value: "codeforces", label: "Codeforces", placeholder: "например: 654B" },
-  {
-    value: "informatics",
-    label: "Информатикс",
-    placeholder: "например: 10 (chapterid)",
-  },
-];
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -290,7 +281,7 @@ export default function EditContest() {
                   }
                   className="border rounded px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {SOURCES.map((s) => (
+                  {JUDGE_PROBLEM_SOURCES.map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
@@ -299,10 +290,7 @@ export default function EditContest() {
                 <input
                   value={newExternalId}
                   onChange={(e) => setNewExternalId(e.target.value)}
-                  placeholder={
-                    SOURCES.find((s) => s.value === newSource)?.placeholder ??
-                    ""
-                  }
+                  placeholder={getProblemSourcePlaceholder(newSource)}
                   className="flex-1 border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
