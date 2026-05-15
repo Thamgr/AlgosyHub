@@ -2,13 +2,16 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from app.core.config import settings
 from app.integrations.judges.base import ExternalSubmission, JudgeAdapter, ProblemData
 from app.models.enums import SubmissionVerdict
+
+if TYPE_CHECKING:
+    from app.models.problem import Problem
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +181,68 @@ class InformaticsAdapter(JudgeAdapter):
         if m:
             return m.group(1).strip()
         return raw
+
+    async def fetch_statement_text(self, problem: "Problem") -> str | None:
+        """Plain-text условие задачи для подсказчика-LLM.
+
+        Информатикс верстает условие в двух соседних ``div.problem-statement``:
+        первый — текст с input/output-specifications, второй — sample-tests.
+        Берём оба, плюс заголовок и блок «Ограничения» из сайдбара. Внутри
+        бежим вручную, а не одним ``get_text("\\n")``, чтобы инлайн-теги
+        вроде ``<span><i>N</i></span>`` (математические переменные) не
+        разваливали каждое предложение на десяток строк.
+        """
+        try:
+            resp = await self._http.get(problem.external_url)
+        except httpx.HTTPError as e:
+            logger.warning("Informatics statement fetch failed: %s", e)
+            return None
+        if resp.status_code != 200:
+            logger.warning(
+                "Informatics statement HTTP %s for %s",
+                resp.status_code,
+                problem.external_url,
+            )
+            return None
+
+        try:
+            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
+        except ImportError:
+            logger.warning(
+                "beautifulsoup4 not installed, can't extract Informatics statement"
+            )
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        parts: list[str] = []
+
+        h2 = soup.find("h2")
+        if h2 and h2.get_text(strip=True):
+            parts.append(_inline_text(h2))
+
+        # Сайдбар «Ограничения» — лимиты времени/памяти. Без авторизации
+        # рендерится таким же блоком, что и в админ-режиме, но с одной
+        # строкой `2 сек. 64 MiB`.
+        for sec in soup.select("section.block_statements_menu"):
+            title_el = sec.find(class_="card-title")
+            body_el = sec.find(class_="card-text")
+            if not title_el or not body_el:
+                continue
+            if "Ограничения" in title_el.get_text(strip=True):
+                limits = _inline_text(body_el)
+                if limits:
+                    parts.append(f"Ограничения: {limits}")
+                break
+
+        for block in soup.select("div.problem-statement"):
+            chunk: list[str] = []
+            _walk_block(block, chunk)
+            if chunk:
+                parts.append("\n\n".join(chunk))
+
+        text = "\n\n".join(parts)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        return text or None
 
     # -- session management ---------------------------------------------------
 
@@ -379,3 +444,58 @@ def _parse_create_time(value: Any) -> datetime:
         except ValueError:
             pass
     return datetime.now(tz=timezone.utc)
+
+
+# -- statement-text helpers ----------------------------------------------------
+# Импорт BeautifulSoup ленивый (внутри `fetch_statement_text`), поэтому
+# здесь типы аннотируем как `Any` — без жёсткой зависимости в runtime.
+
+
+def _inline_text(node: Any) -> str:
+    """Текст элемента в одну строку, схлопнутые пробелы.
+
+    Используется для абзацев и заголовков: в исходнике они часто
+    утыканы инлайн-тегами (``<span lang="en-US"><i>N</i></span>``,
+    ``<sup>``, ``<font>``), и обычный ``get_text("\\n")`` рвал бы
+    каждое предложение на десяток строк.
+    """
+    text = node.get_text(" ", strip=True)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _walk_block(node: Any, out: list[str]) -> None:
+    """Рендерим блочный узел в массив абзацев.
+
+    Идея: бежим по детям; ``<p>``, ``<li>`` склеиваем в одну строку,
+    ``<pre>`` сохраняем с переносами (это сэмпл-тесты), вложенные
+    ``<div>`` рекурсивно разбираем — кроме «титулов» секций
+    (``section-title``/``title`` в `sample-test`), которые отдаются
+    отдельным абзацем-заголовком.
+    """
+    from bs4 import NavigableString, Tag  # type: ignore[import-not-found]
+
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            text = re.sub(r"\s+", " ", str(child)).strip()
+            if text:
+                out.append(text)
+            continue
+        if not isinstance(child, Tag):
+            continue
+        if child.name == "pre":
+            text = child.get_text().strip()
+            if text:
+                out.append(text)
+        elif child.name in {"p", "li"}:
+            text = _inline_text(child)
+            if text:
+                out.append(text)
+        elif child.name == "div":
+            classes = child.get("class") or []
+            if "section-title" in classes or "title" in classes:
+                title = _inline_text(child)
+                if title:
+                    out.append(title)
+            else:
+                _walk_block(child, out)
+        # Прочие inline-теги игнорируем — они уже подцепились внутри <p>.
