@@ -117,32 +117,40 @@ export default function CreateContest() {
             </label>
             {groups.length === 0 ? (
               <p className="text-sm text-gray-400">
-                Сначала{" "}
+                Контест без групп будет публичным — его увидят все студенты. Чтобы
+                ограничить доступ, сначала{" "}
                 <Link to="/groups/new" className="text-blue-600 hover:underline">
                   создайте группу
                 </Link>
-                . Контест без групп не будет виден студентам.
+                .
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {groups.map((g) => {
-                  const on = selectedGroups.has(g.id);
-                  return (
-                    <button
-                      type="button"
-                      key={g.id}
-                      onClick={() => toggleGroup(g.id)}
-                      className={`px-3 py-1 rounded text-xs border ${
-                        on
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-blue-400"
-                      }`}
-                    >
-                      {g.name}
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {groups.map((g) => {
+                    const on = selectedGroups.has(g.id);
+                    return (
+                      <button
+                        type="button"
+                        key={g.id}
+                        onClick={() => toggleGroup(g.id)}
+                        className={`px-3 py-1 rounded text-xs border ${
+                          on
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-700 border-gray-200 hover:border-blue-400"
+                        }`}
+                      >
+                        {g.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedGroups.size === 0 && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Не выбрано ни одной группы — контест будет публичным.
+                  </p>
+                )}
+              </>
             )}
           </div>
 

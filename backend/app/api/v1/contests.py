@@ -10,6 +10,7 @@ from app.schemas.contest import (
     ContestCreate,
     ContestGroupsUpdate,
     ContestResponse,
+    ContestUpdate,
     MatchContestRequest,
     ScoreboardCellResponse,
     ScoreboardResponse,
@@ -110,6 +111,29 @@ async def add_problem(
     )
     await session.commit()
     return problem
+
+
+@router.delete("/{contest_id}/problems/{problem_id}", status_code=204)
+async def remove_problem(
+    contest_id: int, problem_id: int, session: SessionDep, teacher_id: TeacherDep
+):
+    await contest_service.remove_problem(session, contest_id, teacher_id, problem_id)
+    await session.commit()
+
+
+@router.patch("/{contest_id}", response_model=ContestResponse)
+async def update_contest(
+    contest_id: int,
+    body: ContestUpdate,
+    session: SessionDep,
+    teacher_id: TeacherDep,
+):
+    fields = body.model_dump(exclude_unset=True)
+    contest = await contest_service.update_contest(
+        session, contest_id, teacher_id, **fields
+    )
+    await session.commit()
+    return await _to_response(session, contest)
 
 
 @router.put("/{contest_id}/groups", response_model=ContestResponse)

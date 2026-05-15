@@ -24,6 +24,10 @@ export interface MatchContestData {
   ends_at?: string;
 }
 
+export interface UpdateContestData {
+  title?: string;
+}
+
 export const contestsApi = {
   create: (data: CreateContestData) =>
     api.post<Contest>("/api/v1/contests", data).then((r) => r.data),
@@ -50,6 +54,14 @@ export const contestsApi = {
         external_id: externalId,
       })
       .then((r) => r.data),
+
+  removeProblem: (contestId: number, problemId: number) =>
+    api
+      .delete<void>(`/api/v1/contests/${contestId}/problems/${problemId}`)
+      .then((r) => r.data),
+
+  update: (id: number, data: UpdateContestData) =>
+    api.patch<Contest>(`/api/v1/contests/${id}`, data).then((r) => r.data),
 
   updateGroups: (id: number, group_ids: number[]) =>
     api

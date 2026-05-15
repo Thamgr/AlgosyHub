@@ -19,6 +19,7 @@ from app.integrations.judges.codeforces import CodeforcesAdapter
 from app.models.contest import Contest
 from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict, UserRole
 from app.models.group import group_members
+from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
 from app.models.submission import Submission
 from app.models.user import User
@@ -171,6 +172,53 @@ async def set_status(
     return contest
 
 
+async def update_contest(
+    session: AsyncSession,
+    contest_id: int,
+    teacher_id: int,
+    *,
+    title: str | None = None,
+) -> Contest:
+    """Update contest metadata. ``None`` values mean "leave as is"."""
+    repo = ContestRepository(session)
+    contest = await repo.get(contest_id)
+    if not contest:
+        raise AppError("Contest not found", 404)
+    if contest.teacher_id != teacher_id:
+        raise AppError("Forbidden", 403)
+
+    if title is not None:
+        title = title.strip()
+        if not title:
+            raise AppError("Title cannot be empty", 400)
+        contest.title = title
+
+    await session.flush()
+    return contest
+
+
+async def remove_problem(
+    session: AsyncSession, contest_id: int, teacher_id: int, problem_id: int
+) -> None:
+    repo = ContestRepository(session)
+    contest = await repo.get(contest_id)
+    if not contest:
+        raise AppError("Contest not found", 404)
+    if contest.teacher_id != teacher_id:
+        raise AppError("Forbidden", 403)
+    if contest.status != ContestStatus.draft:
+        raise AppError("Cannot modify a running or finished contest", 400)
+
+    existing = await repo.get_problems(contest_id)
+    if not any(p.id == problem_id for p in existing):
+        raise AppError("Problem not in contest", 404)
+
+    await repo.remove_problem(contest_id, problem_id)
+    # Re-compact order_index so the remaining problems stay contiguous.
+    remaining = [p for p in existing if p.id != problem_id]
+    await repo.set_problem_order(contest_id, [p.id for p in remaining])
+
+
 async def create_matched_contest(
     *,
     session: AsyncSession,
@@ -259,7 +307,9 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
     problems = await repo.get_problems(contest_id)
     problem_ids = [p.id for p in problems]
 
-    # Users from the contest's groups.
+    # Users from the contest's groups. If the contest has no group tags it
+    # is public: any user with a JudgeAccount on one of the contest's
+    # problem sources is a potential participant.
     group_ids = await repo.get_group_ids(contest_id)
     users: dict[int, User] = {}
     if group_ids:
@@ -270,9 +320,18 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
         )
         for u in members.scalars().unique().all():
             users[u.id] = u
+    elif problems:
+        sources = {p.external_source for p in problems}
+        connected = await session.execute(
+            select(User)
+            .join(JudgeAccount, JudgeAccount.user_id == User.id)
+            .where(JudgeAccount.source.in_(sources))
+            .distinct()
+        )
+        for u in connected.scalars().unique().all():
+            users[u.id] = u
 
-    # Users that have submitted at all (in case the contest has no groups
-    # attached yet, or a non-member somehow submitted).
+    # Users that have submitted at all (covers ad-hoc / non-member submitters).
     if problem_ids:
         submitters = await session.execute(
             select(User)

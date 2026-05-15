@@ -31,6 +31,13 @@ class ContestGroupsUpdate(BaseModel):
     group_ids: list[int] = Field(default_factory=list)
 
 
+class ContestUpdate(BaseModel):
+    """Partial update of contest metadata. Only fields present in the request
+    body are touched."""
+
+    title: str | None = None
+
+
 class AddProblemRequest(BaseModel):
     external_source: ExternalSource = ExternalSource.codeforces
     external_id: str  # e.g. "654B"

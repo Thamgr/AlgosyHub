@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import ContestDetail from "./pages/ContestDetail";
 import CreateContest from "./pages/CreateContest";
 import CreateGroup from "./pages/CreateGroup";
+import EditContest from "./pages/EditContest";
 import Groups from "./pages/Groups";
 import GroupDetail from "./pages/GroupDetail";
 import MatchContest from "./pages/MatchContest";
@@ -50,6 +51,10 @@ export default function Router() {
                 element={<RequireTeacher><MatchContest /></RequireTeacher>}
               />
               <Route path="/contests/:id" element={<ContestDetail />} />
+              <Route
+                path="/contests/:id/edit"
+                element={<RequireTeacher><EditContest /></RequireTeacher>}
+              />
               <Route path="/problems/:id" element={<ProblemDetail />} />
               <Route path="/profile" element={<Profile />} />
             </Routes>

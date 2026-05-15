@@ -15,7 +15,7 @@ from app.core.database import AsyncSessionFactory
 from app.core.exceptions import AppError
 from app.integrations.judges import registry
 from app.integrations.judges.base import ExternalSubmission
-from app.models.contest import Contest, contest_problems
+from app.models.contest import Contest, contest_groups, contest_problems
 from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict
 from app.models.group import group_members
 from app.models.judge_account import JudgeAccount
@@ -104,11 +104,17 @@ class _UserPollingInfo:
 async def _collect_polling_targets(
     session: AsyncSession,
 ) -> dict[tuple[int, ExternalSource], _UserPollingInfo]:
-    """Строит карту (user_id, source) → инфа для поллинга."""
-    # Все интересные связки достаём одним запросом:
-    # user в группе → группа имеет контест → контест содержит задачу с source X
-    # И этот user имеет JudgeAccount(source=X)
-    stmt = (
+    """Строит карту (user_id, source) → инфа для поллинга.
+
+    Источников связей два:
+      A. user состоит в группе, которая прикреплена к контесту;
+      B. контест публичный (без групп-тегов) — поллим всех, у кого есть
+         подключённый JudgeAccount нужного судьи.
+    В обоих случаях контест должен быть не в draft и содержать задачу того
+    же source, что и JudgeAccount пользователя.
+    """
+    # A. контесты с группами — через членство в группе.
+    grouped_stmt = (
         select(
             group_members.c.user_id,
             JudgeAccount.handle,
@@ -119,7 +125,11 @@ async def _collect_polling_targets(
             Problem.external_id,
         )
         .select_from(group_members)
-        .join(Contest, Contest.group_id == group_members.c.group_id)
+        .join(
+            contest_groups,
+            contest_groups.c.group_id == group_members.c.group_id,
+        )
+        .join(Contest, Contest.id == contest_groups.c.contest_id)
         .join(contest_problems, contest_problems.c.contest_id == Contest.id)
         .join(Problem, Problem.id == contest_problems.c.problem_id)
         .join(
@@ -129,7 +139,34 @@ async def _collect_polling_targets(
         )
         .where(Contest.status != ContestStatus.draft)
     )
-    rows = (await session.execute(stmt)).all()
+
+    has_any_group = (
+        select(contest_groups.c.contest_id)
+        .where(contest_groups.c.contest_id == Contest.id)
+        .exists()
+    )
+
+    # B. публичные контесты — каждый user с подходящим JudgeAccount.
+    public_stmt = (
+        select(
+            JudgeAccount.user_id,
+            JudgeAccount.handle,
+            Contest.id.label("contest_id"),
+            Contest.status,
+            Problem.id.label("problem_id"),
+            Problem.external_source,
+            Problem.external_id,
+        )
+        .select_from(Contest)
+        .join(contest_problems, contest_problems.c.contest_id == Contest.id)
+        .join(Problem, Problem.id == contest_problems.c.problem_id)
+        .join(JudgeAccount, JudgeAccount.source == Problem.external_source)
+        .where(Contest.status != ContestStatus.draft)
+        .where(~has_any_group)
+    )
+
+    rows = list((await session.execute(grouped_stmt)).all())
+    rows.extend((await session.execute(public_stmt)).all())
 
     targets: dict[tuple[int, ExternalSource], _UserPollingInfo] = {}
     # Чтобы не делать N+1, грузим Problem-ы пакетно по id.

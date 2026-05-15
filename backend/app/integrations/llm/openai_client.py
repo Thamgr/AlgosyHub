@@ -1,8 +1,14 @@
-"""OpenAI-based ``LLMClient`` implementation.
+"""Universal OpenAI-compatible ``LLMClient`` implementation.
 
-Only constructs the underlying ``AsyncOpenAI`` lazily so the rest of the app
-runs even without an API key — falling back to ``StubLLMClient`` when
-``OPENAI_API_KEY`` is empty.
+Один и тот же класс используется и для OpenAI, и для Yandex Cloud
+Foundation Models, и для любого другого OpenAI-совместимого провайдера.
+Различия задаются через переменные окружения:
+
+* ``OPENAI_API_KEY`` — токен;
+* ``OPENAI_BASE_URL`` — базовый URL (пусто = OpenAI по умолчанию);
+* ``OPENAI_MODEL`` — имя/URI модели (для Яндекса: ``gpt://<folder>/<model>``);
+* ``OPENAI_PROJECT`` — необязательный заголовок ``OpenAI-Project``
+  (для Яндекса сюда кладут folder_id).
 """
 
 from __future__ import annotations
@@ -17,23 +23,34 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(LLMClient):
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        base_url: str = "",
+        project: str = "",
+    ) -> None:
         self._model = model
-        # Imported here so the dependency is only required when actually used.
+        # Импорт здесь, чтобы зависимость требовалась только при реальном
+        # использовании клиента.
         from openai import AsyncOpenAI  # type: ignore[import-not-found]
 
-        self._client = AsyncOpenAI(api_key=api_key)
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        if project:
+            kwargs["project"] = project
+        self._client = AsyncOpenAI(**kwargs)
 
     async def chat(self, messages: list[dict[str, Any]]) -> str:
-        # JSON mode lets us reliably parse the hint structure. If the caller
-        # didn't ask for JSON in their prompt, OpenAI will still return JSON
-        # (a single key like {"text": "..."}), but the heuristic parser
-        # downstream handles non-strict shapes gracefully.
+        # Не используем response_format=json_object: его поддерживает не
+        # каждый совместимый провайдер. Структуру JSON просим в
+        # системном промпте, а парсер на стороне сервиса умеет
+        # деградировать на нестрогий ответ.
         resp = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,
             temperature=0.4,
-            response_format={"type": "json_object"},
         )
         return resp.choices[0].message.content or ""
 
@@ -61,7 +78,12 @@ class StubLLMClient(LLMClient):
 def make_default_client() -> LLMClient:
     if settings.OPENAI_API_KEY:
         try:
-            return OpenAIClient(settings.OPENAI_API_KEY, settings.OPENAI_MODEL)
+            return OpenAIClient(
+                api_key=settings.OPENAI_API_KEY,
+                model=settings.OPENAI_MODEL,
+                base_url=settings.OPENAI_BASE_URL,
+                project=settings.OPENAI_PROJECT,
+            )
         except Exception:
             logger.exception("Failed to initialise OpenAI client, falling back to stub")
     return StubLLMClient()

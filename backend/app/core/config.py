@@ -13,8 +13,14 @@ class Settings(BaseSettings):
     CF_API_KEY: str = ""
     CF_API_SECRET: str = ""
 
+    # Универсальный OpenAI-совместимый клиент. Подходит и для самого
+    # OpenAI, и для Yandex Cloud Foundation Models, и для других
+    # совместимых провайдеров — отличаются только base_url, идентификатор
+    # модели и (опционально) project (он же folder_id у Яндекса).
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = ""
+    OPENAI_PROJECT: str = ""
 
     # Comma-separated list of allowed CORS origins.
     # Use "*" to allow any origin (sets allow_origin_regex=".*" under the hood).

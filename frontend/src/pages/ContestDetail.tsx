@@ -221,6 +221,12 @@ export default function ContestDetail() {
         </div>
         {isTeacher && (
           <div className="flex gap-2">
+            <Link
+              to={`/contests/${contestId}/edit`}
+              className="px-3 py-1 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+            >
+              Редактировать
+            </Link>
             {contest.status === "draft" && (
               <button
                 onClick={handleStart}
