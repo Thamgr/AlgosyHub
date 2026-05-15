@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # это слишком долго — снаружи nginx и так упадёт раньше. Явный
     # короткий таймаут даёт понятную ошибку в логах.
     OPENAI_TIMEOUT: float = 90.0
+    # Режим reasoning/thinking для моделей, которые его поддерживают
+    # (DeepSeek-v3.2 в Yandex Cloud и т.п.). Значения соответствуют
+    # ReasoningOptions.mode в API Яндекса: ``DISABLED``,
+    # ``ENABLED_HIDDEN``. Пустая строка — не передавать параметр и
+    # оставить поведение провайдера по умолчанию. По умолчанию
+    # выключаем: подсказки короткие, рассуждать вслух модели не нужно,
+    # это экономит токены и сокращает латентность.
+    OPENAI_REASONING_MODE: str = "DISABLED"
 
     # Comma-separated list of allowed CORS origins.
     # Use "*" to allow any origin (sets allow_origin_regex=".*" under the hood).
