@@ -6,7 +6,7 @@ import { groupsApi } from "../api/groups";
 import { judgeAccountsApi } from "../api/judgeAccounts";
 import { submissionsApi } from "../api/submissions";
 import { useAuthStore } from "../store/auth";
-import { getJudgeLabel, getJudgeSubmitUrl } from "../lib/judgeUrls";
+import { getJudgeLabel } from "../lib/judgeUrls";
 import type {
   Contest,
   ExternalSource,
@@ -193,7 +193,6 @@ export default function ContestDetail() {
 
   const problemsById = new Map(problems.map((p) => [p.id, p]));
   const indexByProblemId = new Map(problems.map((p, i) => [p.id, LETTERS[i]]));
-  const canSubmit = contest.status === "running";
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -280,7 +279,6 @@ export default function ContestDetail() {
           problems={problems}
           contest={contest}
           isTeacher={isTeacher}
-          canSubmit={canSubmit}
           addInput={addInput}
           setAddInput={setAddInput}
           addError={addError}
@@ -340,7 +338,6 @@ function ProblemsTab({
   problems,
   contest,
   isTeacher,
-  canSubmit,
   addInput,
   setAddInput,
   addError,
@@ -350,7 +347,6 @@ function ProblemsTab({
   problems: Problem[];
   contest: Contest;
   isTeacher: boolean;
-  canSubmit: boolean;
   addInput: string;
   setAddInput: (s: string) => void;
   addError: string;
@@ -365,54 +361,33 @@ function ProblemsTab({
         ) : (
           <table className="w-full text-sm">
             <tbody>
-              {problems.map((p, i) => {
-                const submitUrl = getJudgeSubmitUrl(p);
-                return (
-                  <tr
-                    key={p.id}
-                    className="border-b last:border-0 hover:bg-gray-50"
-                  >
-                    <td className="px-4 py-3 font-mono text-gray-400 w-8">
-                      {LETTERS[i]}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/problems/${p.id}?contest=${contest.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {p.title}
-                      </Link>
-                      <div className="text-xs text-gray-400">
-                        {getJudgeLabel(p.external_source)} · {p.external_id}
-                        {p.tags.length > 0 && (
-                          <> · {p.tags.join(", ")}</>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 w-16">
-                      {p.difficulty ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right w-48">
-                      {canSubmit ? (
-                        <a
-                          href={submitUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-block px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                        >
-                          Сдать на {getJudgeLabel(p.external_source)} ↗
-                        </a>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          {contest.status === "finished"
-                            ? "Контест завершён"
-                            : "Контест не запущен"}
-                        </span>
+              {problems.map((p, i) => (
+                <tr
+                  key={p.id}
+                  className="border-b last:border-0 hover:bg-gray-50"
+                >
+                  <td className="px-4 py-3 font-mono text-gray-400 w-8">
+                    {LETTERS[i]}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      to={`/problems/${p.id}?contest=${contest.id}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {p.title}
+                    </Link>
+                    <div className="text-xs text-gray-400">
+                      {getJudgeLabel(p.external_source)} · {p.external_id}
+                      {p.tags.length > 0 && (
+                        <> · {p.tags.join(", ")}</>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 w-16">
+                    {p.difficulty ?? "—"}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

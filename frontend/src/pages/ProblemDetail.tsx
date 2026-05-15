@@ -91,29 +91,37 @@ export default function ProblemDetail() {
             )}
           </div>
 
-          <div className="border rounded bg-white p-4 space-y-2">
-            <p className="text-sm text-gray-600">
-              Условие задачи хранится на сайте судьи. Откройте его в новой вкладке —
-              а здесь мы держим всё остальное: подсказки и историю посылок в контесте.
-            </p>
-            <div className="flex gap-2">
-              <a
-                href={statementUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
-              >
-                Открыть условие ↗
-              </a>
-              <a
-                href={submitUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-              >
-                Сдать на {getJudgeLabel(problem.external_source)} ↗
-              </a>
+          <div className="border rounded bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">
+                Условие проксируется с сайта судьи. Если что-то отображается криво —
+                откройте оригинал в новой вкладке.
+              </p>
+              <div className="flex gap-2 shrink-0">
+                <a
+                  href={statementUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-gray-900"
+                >
+                  Открыть условие ↗
+                </a>
+                <a
+                  href={submitUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  Сдать на {getJudgeLabel(problem.external_source)} ↗
+                </a>
+              </div>
             </div>
+            <iframe
+              src={statementUrl}
+              title={`Условие: ${problem.title}`}
+              className="w-full h-[75vh] border rounded bg-white"
+              sandbox="allow-same-origin allow-popups allow-scripts"
+            />
           </div>
         </div>
 
