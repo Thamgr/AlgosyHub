@@ -2,10 +2,20 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.deps import CurrentUserID, SessionDep
 from app.models.enums import ExternalSource
+from app.schemas.auth import UpdateUsernameRequest, UserResponse
 from app.schemas.judge_account import JudgeAccountResponse, JudgeAccountUpsert
-from app.services import judge_account_service
+from app.services import judge_account_service, user_service
 
 router = APIRouter(prefix="/me", tags=["me"])
+
+
+@router.patch("", response_model=UserResponse)
+async def update_me(
+    body: UpdateUsernameRequest, session: SessionDep, user_id: CurrentUserID
+):
+    user = await user_service.rename(session, user_id, body.username)
+    await session.commit()
+    return user
 
 
 @router.get("/judge-accounts", response_model=list[JudgeAccountResponse])

@@ -9,6 +9,7 @@ from app.api.v1 import groups as groups_router
 from app.api.v1 import me as me_router
 from app.api.v1 import problems as problems_router
 from app.api.v1 import submissions as submissions_router
+from app.api.v1 import users as users_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.exceptions import register_exception_handlers
@@ -62,6 +63,7 @@ app.include_router(problems_router.router, prefix="/api/v1")
 app.include_router(contests_router.router, prefix="/api/v1")
 app.include_router(submissions_router.router, prefix="/api/v1")
 app.include_router(me_router.router, prefix="/api/v1")
+app.include_router(users_router.router, prefix="/api/v1")
 
 
 @app.get("/healthz", tags=["system"])

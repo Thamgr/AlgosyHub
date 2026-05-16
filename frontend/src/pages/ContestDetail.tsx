@@ -265,7 +265,7 @@ export default function ContestDetail() {
             </span>
           ))}
           . Чтобы AlgosyHub видел ваши посылки, укажите свой ник в{" "}
-          <Link to="/profile" className="underline">профиле</Link>.
+          <Link to="/settings" className="underline">настройках профиля</Link>.
         </div>
       )}
 
@@ -609,7 +609,14 @@ function ScoreboardTab({
           {scoreboard.rows.map((row, idx) => (
             <tr key={row.user_id} className="border-t hover:bg-gray-50">
               <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
-              <td className="px-3 py-2 font-medium">{row.username}</td>
+              <td className="px-3 py-2 font-medium">
+                <Link
+                  to={`/u/${row.username}`}
+                  className="hover:underline"
+                >
+                  {row.username}
+                </Link>
+              </td>
               <td className="px-3 py-2 text-center font-mono">
                 <span className="text-green-700">{row.solved}</span>
                 <span className="text-gray-300">/{problems.length}</span>

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AppHeader from "../components/AppHeader";
+import { getApiError } from "../api/errors";
 import { JUDGE_SOURCES, judgeAccountsApi } from "../api/judgeAccounts";
+import { meApi } from "../api/users";
 import { useAuthStore } from "../store/auth";
 import type { ExternalSource, JudgeAccount } from "../api/types";
 
-export default function Profile() {
-  const { user, logout } = useAuthStore();
+export default function ProfileSettings() {
+  const { user, setUser } = useAuthStore();
   const navigate = useNavigate();
 
   const [accounts, setAccounts] = useState<JudgeAccount[]>([]);
@@ -18,6 +21,10 @@ export default function Profile() {
   );
   const [error, setError] = useState("");
 
+  const [usernameDraft, setUsernameDraft] = useState(user?.username ?? "");
+  const [usernameSaving, setUsernameSaving] = useState(false);
+  const [usernameError, setUsernameError] = useState("");
+
   const byHandle = useMemo(() => {
     const map = {} as Record<ExternalSource, JudgeAccount>;
     for (const a of accounts) map[a.source] = a;
@@ -29,15 +36,35 @@ export default function Profile() {
       .list()
       .then((data) => {
         setAccounts(data);
-        // Подгружаем текущие хэндлы в форму как initial value.
         const initial = {} as Record<ExternalSource, string>;
         for (const a of data) initial[a.source] = a.handle;
         setDrafts((d) => ({ ...initial, ...d }));
       })
-      .catch(() => setError("Не удалось загрузить судей"));
+      .catch(() => setError("Не удалось загрузить judge-аккаунты"));
   }, []);
 
-  async function handleSave(source: ExternalSource) {
+  useEffect(() => {
+    if (user?.username) setUsernameDraft(user.username);
+  }, [user?.username]);
+
+  async function handleSaveUsername(e: React.FormEvent) {
+    e.preventDefault();
+    const next = usernameDraft.trim();
+    if (!next || next === user?.username) return;
+    setUsernameError("");
+    setUsernameSaving(true);
+    try {
+      const updated = await meApi.updateUsername(next);
+      setUser(updated);
+      navigate(`/u/${updated.username}`);
+    } catch (err: unknown) {
+      setUsernameError(getApiError(err, "Не удалось сменить username"));
+    } finally {
+      setUsernameSaving(false);
+    }
+  }
+
+  async function handleSaveJudge(source: ExternalSource) {
     const value = (drafts[source] ?? "").trim();
     setError("");
     setSavingSource(source);
@@ -62,38 +89,58 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="font-semibold">
-          AlgosyHub
-        </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-gray-500">
-            {user?.username}{" "}
-            <span className="text-xs text-gray-400">({user?.role})</span>
-          </span>
-          <button
-            onClick={() => {
-              logout();
-              navigate("/login");
-            }}
-            className="text-red-500 hover:underline"
-          >
-            Выйти
-          </button>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="p-6 max-w-2xl mx-auto space-y-6">
         <div>
-          <Link to="/" className="text-sm text-gray-500 hover:underline">
-            ← Назад
+          <Link
+            to={user ? `/u/${user.username}` : "/"}
+            className="text-sm text-gray-500 hover:underline"
+          >
+            ← В профиль
           </Link>
         </div>
 
-        <h1 className="text-2xl font-semibold">Профиль</h1>
+        <h1 className="text-2xl font-semibold">Настройки профиля</h1>
 
         <section>
-          <h2 className="text-sm font-medium text-gray-700 mb-2">Аккаунты на judge'ах</h2>
+          <h2 className="text-sm font-medium text-gray-700 mb-2">Username</h2>
+          <form
+            onSubmit={handleSaveUsername}
+            className="border rounded bg-white p-4 flex items-center gap-3"
+          >
+            <input
+              type="text"
+              value={usernameDraft}
+              onChange={(e) => setUsernameDraft(e.target.value)}
+              className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="username"
+            />
+            <button
+              type="submit"
+              disabled={
+                usernameSaving ||
+                !usernameDraft.trim() ||
+                usernameDraft.trim() === user?.username
+              }
+              className="px-3 py-2 bg-gray-800 text-white text-sm rounded hover:bg-gray-900 disabled:opacity-50"
+            >
+              {usernameSaving ? "..." : "Сохранить"}
+            </button>
+          </form>
+          {usernameError && (
+            <p className="mt-2 text-sm text-red-500">{usernameError}</p>
+          )}
+          <p className="mt-2 text-xs text-gray-400">
+            3–32 символа: латиница, цифры, <code>_</code>, <code>.</code>,{" "}
+            <code>-</code>.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-medium text-gray-700 mb-2">
+            Аккаунты на judge'ах
+          </h2>
           <p className="text-xs text-gray-500 mb-4">
             Укажите свой ник на внешнем сайте, чтобы AlgosyHub видел ваши
             посылки в контестах. Сдавать решения нужно прямо у судьи —
@@ -133,7 +180,7 @@ export default function Profile() {
                     className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
-                    onClick={() => handleSave(source)}
+                    onClick={() => handleSaveJudge(source)}
                     disabled={isSaving}
                     className="px-3 py-2 bg-gray-800 text-white text-sm rounded hover:bg-gray-900 disabled:opacity-50"
                   >

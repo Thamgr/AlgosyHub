@@ -25,3 +25,21 @@ class UserResponse(BaseModel):
     role: UserRole
 
     model_config = {"from_attributes": True}
+
+
+class UserStats(BaseModel):
+    solved_problems: int
+    total_submissions: int
+    accepted_submissions: int
+    success_rate: float  # 0..1, доля accepted среди всех посылок
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    role: UserRole
+    stats: UserStats
+
+
+class UpdateUsernameRequest(BaseModel):
+    username: str

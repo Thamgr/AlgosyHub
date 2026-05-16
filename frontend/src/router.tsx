@@ -11,7 +11,8 @@ import Groups from "./pages/Groups";
 import GroupDetail from "./pages/GroupDetail";
 import MatchContest from "./pages/MatchContest";
 import ProblemDetail from "./pages/ProblemDetail";
-import Profile from "./pages/Profile";
+import ProfileSettings from "./pages/ProfileSettings";
+import UserProfile from "./pages/UserProfile";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -30,6 +31,8 @@ export default function Router() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      {/* Профиль пользователя — публичный, без RequireAuth. */}
+      <Route path="/u/:username" element={<UserProfile />} />
       <Route
         path="/*"
         element={
@@ -56,7 +59,7 @@ export default function Router() {
                 element={<RequireTeacher><EditContest /></RequireTeacher>}
               />
               <Route path="/problems/:id" element={<ProblemDetail />} />
-              <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<ProfileSettings />} />
             </Routes>
           </RequireAuth>
         }

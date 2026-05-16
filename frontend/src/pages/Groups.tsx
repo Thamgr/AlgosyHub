@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { groupsApi } from "../api/groups";
 import { useAuthStore } from "../store/auth";
+import AppHeader from "../components/AppHeader";
 import type { Group } from "../api/types";
 
 export default function Groups() {
-  const { user, logout } = useAuthStore();
-  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const isTeacher = user?.role === "teacher";
 
   const [groups, setGroups] = useState<Group[] | null>(null);
@@ -17,22 +17,7 @@ export default function Groups() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="font-semibold">AlgosyHub</Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/profile" className="text-gray-700 hover:underline">Профиль</Link>
-          <span className="text-gray-500">
-            {user?.username}{" "}
-            <span className="text-xs text-gray-400">({user?.role})</span>
-          </span>
-          <button
-            onClick={() => { logout(); navigate("/login"); }}
-            className="text-red-500 hover:underline"
-          >
-            Выйти
-          </button>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="p-6 max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">

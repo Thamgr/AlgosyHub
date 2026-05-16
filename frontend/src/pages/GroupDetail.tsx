@@ -84,7 +84,12 @@ export default function GroupDetail() {
           ) : (
             members.map((m) => (
               <div key={m.id} className="flex items-center justify-between px-4 py-2">
-                <span className="text-sm">{m.username}</span>
+                <Link
+                  to={`/u/${m.username}`}
+                  className="text-sm hover:underline"
+                >
+                  {m.username}
+                </Link>
                 {isTeacher && (
                   <button
                     onClick={() => handleRemoveMember(m.id)}

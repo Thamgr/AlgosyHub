@@ -6,6 +6,18 @@ export interface User {
   role: UserRole;
 }
 
+export interface UserStats {
+  solved_problems: number;
+  total_submissions: number;
+  accepted_submissions: number;
+  /** Доля успешных посылок 0..1. */
+  success_rate: number;
+}
+
+export interface UserProfile extends User {
+  stats: UserStats;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: string;

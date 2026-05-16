@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { contestsApi } from "../api/contests";
 import { groupsApi } from "../api/groups";
 import { useAuthStore } from "../store/auth";
+import AppHeader from "../components/AppHeader";
 import type { Contest, Group } from "../api/types";
 
 export default function Dashboard() {
-  const { user, logout } = useAuthStore();
-  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const isTeacher = user?.role === "teacher";
 
   const [groups, setGroups] = useState<Group[]>([]);
@@ -20,24 +20,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">AlgosyHub</span>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/profile" className="text-gray-700 hover:underline">
-            Профиль
-          </Link>
-          <span className="text-gray-500">
-            {user?.username}{" "}
-            <span className="text-xs text-gray-400">({user?.role})</span>
-          </span>
-          <button
-            onClick={() => { logout(); navigate("/login"); }}
-            className="text-red-500 hover:underline"
-          >
-            Выйти
-          </button>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="p-6 max-w-2xl mx-auto space-y-8">
 
