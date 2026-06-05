@@ -61,6 +61,7 @@ export interface Contest {
   status: ContestStatus;
   starts_at: string | null;
   ends_at: string | null;
+  show_ai_hints: boolean;
 }
 
 export interface Submission {

@@ -7,14 +7,18 @@ export const problemsApi = {
   get: (id: number) =>
     api.get<Problem>(`/api/v1/problems/${id}`).then((r) => r.data),
 
-  getHints: (id: number) =>
+  getHints: (id: number, contestId?: number) =>
     api
-      .get<ProblemHints>(`/api/v1/problems/${id}/hints`)
+      .get<ProblemHints>(`/api/v1/problems/${id}/hints`, {
+        params: contestId != null ? { contest_id: contestId } : undefined,
+      })
       .then((r) => r.data),
 
-  regenerateHints: (id: number) =>
+  regenerateHints: (id: number, contestId?: number) =>
     api
-      .post<ProblemHints>(`/api/v1/problems/${id}/hints/regenerate`)
+      .post<ProblemHints>(`/api/v1/problems/${id}/hints/regenerate`, null, {
+        params: contestId != null ? { contest_id: contestId } : undefined,
+      })
       .then((r) => r.data),
 
   listCFTags: () =>

@@ -34,6 +34,7 @@ async def _to_response(session, contest: Contest) -> ContestResponse:
         status=contest.status,
         starts_at=contest.starts_at,
         ends_at=contest.ends_at,
+        show_ai_hints=contest.show_ai_hints,
     )
 
 
@@ -63,7 +64,13 @@ async def create_contest(body: ContestCreate, session: SessionDep, teacher_id: T
         group_ids = [body.group_id]
 
     contest = await contest_service.create_contest(
-        session, teacher_id, group_ids, body.title, body.starts_at, body.ends_at
+        session,
+        teacher_id,
+        group_ids,
+        body.title,
+        body.starts_at,
+        body.ends_at,
+        show_ai_hints=body.show_ai_hints,
     )
     await session.commit()
     return await _to_response(session, contest)
@@ -85,6 +92,7 @@ async def match_contest(
         count=body.count,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
+        show_ai_hints=body.show_ai_hints,
     )
     await session.commit()
     return await _to_response(session, contest)

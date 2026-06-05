@@ -13,6 +13,7 @@ class ContestCreate(BaseModel):
     group_ids: list[int] = Field(default_factory=list)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    show_ai_hints: bool = True
 
 
 class ContestResponse(BaseModel):
@@ -23,6 +24,7 @@ class ContestResponse(BaseModel):
     status: ContestStatus
     starts_at: datetime | None
     ends_at: datetime | None
+    show_ai_hints: bool
 
     model_config = {"from_attributes": True}
 
@@ -36,6 +38,7 @@ class ContestUpdate(BaseModel):
     body are touched."""
 
     title: str | None = None
+    show_ai_hints: bool | None = None
 
 
 class AddProblemRequest(BaseModel):
@@ -72,3 +75,4 @@ class MatchContestRequest(BaseModel):
     count: int = Field(default=5, ge=1, le=15)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    show_ai_hints: bool = True

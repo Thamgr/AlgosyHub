@@ -463,11 +463,7 @@ function SubmissionsTab({
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-400">
-          Посылки подтягиваются автоматически из подключённых judge'ей. После сдачи на CF
-          результат появится здесь в течение ~30 секунд.
-        </p>
+      <div className="flex items-center justify-end mb-2">
         <RefreshButton
           onClick={onRefresh}
           refreshing={refreshing}
@@ -486,20 +482,12 @@ function SubmissionsTab({
                 <th className="px-4 py-2 text-left font-medium">Язык</th>
                 <th className="px-4 py-2 text-left font-medium">Вердикт</th>
                 <th className="px-4 py-2 text-left font-medium">Время / Память</th>
-                <th className="px-4 py-2 text-left font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {submissions.map((s) => {
                 const problem = problemsById.get(s.problem_id);
                 const letter = indexByProblemId.get(s.problem_id);
-                const cfUrl =
-                  problem?.external_source === "codeforces" &&
-                  s.external_submission_id
-                    ? `https://codeforces.com/contest/${
-                        problem.external_id.match(/^(\d+)/)?.[1]
-                      }/submission/${s.external_submission_id}`
-                    : null;
                 return (
                   <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="px-4 py-2 text-gray-500 text-xs">
@@ -519,18 +507,6 @@ function SubmissionsTab({
                       {s.time_ms != null ? `${s.time_ms} мс` : "—"}
                       {" / "}
                       {s.memory_mb != null ? `${s.memory_mb} МБ` : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-xs">
-                      {cfUrl && (
-                        <a
-                          href={cfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          на CF ↗
-                        </a>
-                      )}
                     </td>
                   </tr>
                 );

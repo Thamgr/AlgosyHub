@@ -1,20 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { contestsApi } from "../api/contests";
 import { problemsApi } from "../api/problems";
 import { getApiError } from "../api/errors";
 import { useAuthStore } from "../store/auth";
 import { getJudgeLabel, getJudgeSubmitUrl } from "../lib/judgeUrls";
-import type { Problem, ProblemHints } from "../api/types";
+import type { Contest, Problem, ProblemHints } from "../api/types";
 
 export default function ProblemDetail() {
   const { id } = useParams<{ id: string }>();
   const problemId = Number(id);
   const [search] = useSearchParams();
-  const contestId = search.get("contest");
+  const contestIdParam = search.get("contest");
+  const contestId = contestIdParam ? Number(contestIdParam) : null;
   const user = useAuthStore((s) => s.user);
   const isTeacher = user?.role === "teacher";
 
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [contest, setContest] = useState<Contest | null>(null);
   const [hints, setHints] = useState<ProblemHints | null>(null);
   const [revealed, setRevealed] = useState<0 | 1 | 2 | 3>(0);
   const [hintsLoading, setHintsLoading] = useState(false);
@@ -24,12 +27,26 @@ export default function ProblemDetail() {
     problemsApi.get(problemId).then(setProblem).catch(() => setProblem(null));
   }, [problemId]);
 
+  useEffect(() => {
+    if (contestId == null || Number.isNaN(contestId)) {
+      setContest(null);
+      return;
+    }
+    contestsApi
+      .get(contestId)
+      .then(setContest)
+      .catch(() => setContest(null));
+  }, [contestId]);
+
   async function loadHints() {
     if (hints || hintsLoading) return;
     setHintsLoading(true);
     setHintsError("");
     try {
-      const data = await problemsApi.getHints(problemId);
+      const data = await problemsApi.getHints(
+        problemId,
+        contestId ?? undefined,
+      );
       setHints(data);
     } catch (err: unknown) {
       setHintsError(getApiError(err, "Не удалось получить подсказки"));
@@ -43,7 +60,10 @@ export default function ProblemDetail() {
     setHintsError("");
     setRevealed(0);
     try {
-      const data = await problemsApi.regenerateHints(problemId);
+      const data = await problemsApi.regenerateHints(
+        problemId,
+        contestId ?? undefined,
+      );
       setHints(data);
     } catch (err: unknown) {
       setHintsError(getApiError(err, "Не удалось перегенерировать"));
@@ -60,7 +80,9 @@ export default function ProblemDetail() {
   }/api/v1/problems/${problem.id}/statement`;
   const submitUrl = getJudgeSubmitUrl(problem);
 
-  const backHref = contestId ? `/contests/${contestId}` : "/";
+  const backHref = contestId != null ? `/contests/${contestId}` : "/";
+  const showHints =
+    contestId == null || contest?.show_ai_hints !== false;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,40 +90,48 @@ export default function ProblemDetail() {
         <Link to={backHref} className="text-sm text-gray-400 hover:underline">
           ← Назад
         </Link>
-        <div>
-          <h1 className="text-2xl font-semibold">{problem.title}</h1>
-          <div className="text-xs text-gray-500 mt-1">
-            {getJudgeLabel(problem.external_source)} · {problem.external_id}
-            {problem.difficulty != null && (
-              <> · сложность {problem.difficulty}</>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold">{problem.title}</h1>
+            <div className="text-xs text-gray-500 mt-1">
+              {getJudgeLabel(problem.external_source)} · {problem.external_id}
+              {problem.difficulty != null && (
+                <> · сложность {problem.difficulty}</>
+              )}
+            </div>
+            {problem.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {problem.tags.map((t) => (
+                  <span
+                    key={t}
+                    className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
-          {problem.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {problem.tags.map((t) => (
-                <span
-                  key={t}
-                  className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          )}
+          <a
+            href={submitUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          >
+            Сдать на {getJudgeLabel(problem.external_source)} ↗
+          </a>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-2 border rounded bg-white p-4 space-y-3">
-            <div className="flex items-center justify-end gap-2">
-              <a
-                href={submitUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-              >
-                Сдать на {getJudgeLabel(problem.external_source)} ↗
-              </a>
-            </div>
+        <div
+          className={`grid gap-6 items-start ${
+            showHints ? "lg:grid-cols-3" : ""
+          }`}
+        >
+          <div
+            className={`border rounded bg-white p-4 ${
+              showHints ? "lg:col-span-2" : ""
+            }`}
+          >
             <iframe
               src={statementUrl}
               title={`Условие: ${problem.title}`}
@@ -110,65 +140,67 @@ export default function ProblemDetail() {
             />
           </div>
 
-          <aside className="border rounded bg-white p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold">AI-подсказки</h2>
-              {hints && isTeacher && (
-                <button
-                  onClick={regenerate}
-                  disabled={hintsLoading}
-                  className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                >
-                  Перегенерировать
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Три уровня подсказок: от лёгкого намёка до полного решения.
-              Открывайте по одному, если застряли.
-            </p>
-
-            {hintsError && (
-              <p className="text-xs text-red-500 mb-2">{hintsError}</p>
-            )}
-
-            {!hints ? (
-              <button
-                onClick={loadHints}
-                disabled={hintsLoading}
-                className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {hintsLoading ? "Генерируется..." : "Запросить подсказки"}
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <HintBlock
-                  level={1}
-                  label="Намёк"
-                  content={hints.hint1}
-                  revealed={revealed >= 1}
-                  onReveal={() => setRevealed((r) => (r < 1 ? 1 : r))}
-                />
-                <HintBlock
-                  level={2}
-                  label="Идея решения"
-                  content={hints.hint2}
-                  revealed={revealed >= 2}
-                  onReveal={() => setRevealed((r) => (r < 2 ? 2 : r))}
-                  disabled={revealed < 1}
-                />
-                <HintBlock
-                  level={3}
-                  label="Полное решение"
-                  content={hints.hint3}
-                  revealed={revealed >= 3}
-                  onReveal={() => setRevealed(3)}
-                  disabled={revealed < 2}
-                  warning
-                />
+          {showHints ? (
+            <aside className="border rounded bg-white p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold">AI-подсказки</h2>
+                {hints && isTeacher && (
+                  <button
+                    onClick={regenerate}
+                    disabled={hintsLoading}
+                    className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                  >
+                    Перегенерировать
+                  </button>
+                )}
               </div>
-            )}
-          </aside>
+              <p className="text-xs text-gray-500 mb-3">
+                Три уровня подсказок: от лёгкого намёка до полного решения.
+                Открывайте по одному, если застряли.
+              </p>
+
+              {hintsError && (
+                <p className="text-xs text-red-500 mb-2">{hintsError}</p>
+              )}
+
+              {!hints ? (
+                <button
+                  onClick={loadHints}
+                  disabled={hintsLoading}
+                  className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {hintsLoading ? "Генерируется..." : "Запросить подсказки"}
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <HintBlock
+                    level={1}
+                    label="Намёк"
+                    content={hints.hint1}
+                    revealed={revealed >= 1}
+                    onReveal={() => setRevealed((r) => (r < 1 ? 1 : r))}
+                  />
+                  <HintBlock
+                    level={2}
+                    label="Идея решения"
+                    content={hints.hint2}
+                    revealed={revealed >= 2}
+                    onReveal={() => setRevealed((r) => (r < 2 ? 2 : r))}
+                    disabled={revealed < 1}
+                  />
+                  <HintBlock
+                    level={3}
+                    label="Полное решение"
+                    content={hints.hint3}
+                    revealed={revealed >= 3}
+                    onReveal={() => setRevealed(3)}
+                    disabled={revealed < 2}
+                    warning
+                  />
+                </div>
+              )}
+            </aside>
+          ) : null}
         </div>
       </main>
     </div>

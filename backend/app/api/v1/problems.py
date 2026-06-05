@@ -1,10 +1,11 @@
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from app.core.deps import CurrentUserID, SessionDep, require_role
+from app.core.exceptions import AppError
 from app.integrations.judges import registry
 from app.models.enums import UserRole
 from app.schemas.problem import (
@@ -12,7 +13,7 @@ from app.schemas.problem import (
     ProblemHintsResponse,
     ProblemResponse,
 )
-from app.services import ai_hint_service, problem_service
+from app.services import ai_hint_service, contest_service, problem_service
 
 router = APIRouter(prefix="/problems", tags=["problems"])
 
@@ -60,7 +61,20 @@ async def get_problem_statement(problem_id: int, session: SessionDep):
 
 
 @router.get("/{problem_id}/hints", response_model=ProblemHintsResponse)
-async def get_hints(problem_id: int, session: SessionDep, _: CurrentUserID):
+async def get_hints(
+    problem_id: int,
+    session: SessionDep,
+    user_id: CurrentUserID,
+    contest_id: int | None = Query(default=None),
+):
+    if contest_id is not None:
+        try:
+            await contest_service.assert_ai_hints_allowed(
+                session, contest_id, problem_id, user_id
+            )
+        except AppError as e:
+            raise HTTPException(e.status_code, e.message) from e
+
     cached = await ai_hint_service.get_cached(session, problem_id)
     if cached is not None:
         return ProblemHintsResponse(
@@ -83,8 +97,19 @@ async def get_hints(problem_id: int, session: SessionDep, _: CurrentUserID):
 
 @router.post("/{problem_id}/hints/regenerate", response_model=ProblemHintsResponse)
 async def regenerate_hints(
-    problem_id: int, session: SessionDep, _: TeacherDep
+    problem_id: int,
+    session: SessionDep,
+    teacher_id: TeacherDep,
+    contest_id: int | None = Query(default=None),
 ):
+    if contest_id is not None:
+        try:
+            await contest_service.assert_ai_hints_allowed(
+                session, contest_id, problem_id, teacher_id
+            )
+        except AppError as e:
+            raise HTTPException(e.status_code, e.message) from e
+
     hint = await ai_hint_service.regenerate(session, problem_id)
     await session.commit()
     return ProblemHintsResponse(

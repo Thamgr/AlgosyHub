@@ -50,6 +50,8 @@ async def create_contest(
     title: str,
     starts_at: datetime | None,
     ends_at: datetime | None,
+    *,
+    show_ai_hints: bool = True,
 ) -> Contest:
     repo = ContestRepository(session)
     # Legacy ``group_id`` keeps the first attached group so old code paths
@@ -61,6 +63,7 @@ async def create_contest(
         title=title,
         starts_at=starts_at,
         ends_at=ends_at,
+        show_ai_hints=show_ai_hints,
     )
     if group_ids:
         await repo.set_groups(contest.id, group_ids)
@@ -158,6 +161,21 @@ async def get_problems(session: AsyncSession, contest_id: int) -> list[Problem]:
     return await ContestRepository(session).get_problems(contest_id)
 
 
+async def assert_ai_hints_allowed(
+    session: AsyncSession,
+    contest_id: int,
+    problem_id: int,
+    user_id: int,
+) -> None:
+    """Raise if hints are disabled for this contest or the problem is not in it."""
+    contest = await get_contest_for_user(session, contest_id, user_id)
+    if not contest.show_ai_hints:
+        raise AppError("AI hints are disabled for this contest", 403)
+    problems = await get_problems(session, contest_id)
+    if not any(p.id == problem_id for p in problems):
+        raise AppError("Problem not in contest", 400)
+
+
 async def set_status(
     session: AsyncSession, contest_id: int, teacher_id: int, status: ContestStatus
 ) -> Contest:
@@ -178,6 +196,7 @@ async def update_contest(
     teacher_id: int,
     *,
     title: str | None = None,
+    show_ai_hints: bool | None = None,
 ) -> Contest:
     """Update contest metadata. ``None`` values mean "leave as is"."""
     repo = ContestRepository(session)
@@ -192,6 +211,9 @@ async def update_contest(
         if not title:
             raise AppError("Title cannot be empty", 400)
         contest.title = title
+
+    if show_ai_hints is not None:
+        contest.show_ai_hints = show_ai_hints
 
     await session.flush()
     return contest
@@ -249,6 +271,7 @@ async def create_matched_contest(
     count: int,
     starts_at: datetime | None,
     ends_at: datetime | None,
+    show_ai_hints: bool = True,
 ) -> Contest:
     """Pull the full CF problemset, filter by tag+rating, pick ``count`` at random.
 
@@ -295,6 +318,7 @@ async def create_matched_contest(
         title=title,
         starts_at=starts_at,
         ends_at=ends_at,
+        show_ai_hints=show_ai_hints,
     )
 
     repo = ContestRepository(session)

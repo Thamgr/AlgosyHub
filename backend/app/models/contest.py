@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -36,4 +36,5 @@ class Contest(Base):
     status: Mapped[ContestStatus] = mapped_column(default=ContestStatus.draft)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    show_ai_hints: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

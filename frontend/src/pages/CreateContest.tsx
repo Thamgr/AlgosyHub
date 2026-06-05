@@ -17,6 +17,7 @@ interface ProblemRow {
 export default function CreateContest() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [groups, setGroups] = useState<Group[]>([]);
   const [problems, setProblems] = useState<ProblemRow[]>([
@@ -63,6 +64,7 @@ export default function CreateContest() {
       const contest = await contestsApi.create({
         title: title.trim(),
         group_ids: Array.from(selectedGroups),
+        show_ai_hints: showAiHints,
       });
 
       const cleaned = problems
@@ -152,6 +154,23 @@ export default function CreateContest() {
                 )}
               </>
             )}
+          </div>
+
+          <div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAiHints}
+                onChange={(e) => setShowAiHints(e.target.checked)}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Показывать AI-подсказки</span>
+                <span className="block text-gray-500 font-normal mt-0.5">
+                  Можно изменить позже в настройках контеста.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>

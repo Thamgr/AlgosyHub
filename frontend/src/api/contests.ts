@@ -11,6 +11,7 @@ export interface CreateContestData {
   group_ids?: number[];
   starts_at?: string;
   ends_at?: string;
+  show_ai_hints?: boolean;
 }
 
 export interface MatchContestData {
@@ -22,10 +23,12 @@ export interface MatchContestData {
   count: number;
   starts_at?: string;
   ends_at?: string;
+  show_ai_hints?: boolean;
 }
 
 export interface UpdateContestData {
   title?: string;
+  show_ai_hints?: boolean;
 }
 
 export const contestsApi = {

@@ -22,6 +22,7 @@ export default function EditContest() {
   const [groups, setGroups] = useState<Group[]>([]);
 
   const [title, setTitle] = useState("");
+  const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
 
   const [newSource, setNewSource] = useState<ExternalSource>("codeforces");
@@ -47,6 +48,7 @@ export default function EditContest() {
       .then((c) => {
         setContest(c);
         setTitle(c.title);
+        setShowAiHints(c.show_ai_hints);
         setSelectedGroups(new Set(c.group_ids));
       })
       .catch(() => setNotFound(true));
@@ -65,7 +67,11 @@ export default function EditContest() {
     for (const g of selectedGroups) if (!a.has(g)) return true;
     return false;
   }, [contest, selectedGroups]);
-  const isDirty = titleDirty || groupsDirty;
+  const hintsDirty = useMemo(
+    () => contest != null && showAiHints !== contest.show_ai_hints,
+    [contest, showAiHints],
+  );
+  const isDirty = titleDirty || groupsDirty || hintsDirty;
   const isDraft = contest?.status === "draft";
 
   function toggleGroup(gid: number) {
@@ -132,8 +138,12 @@ export default function EditContest() {
     setSaving(true);
     try {
       let updated = contest;
-      if (titleDirty) {
-        updated = await contestsApi.update(contestId, { title: title.trim() });
+      const metaDirty = titleDirty || hintsDirty;
+      if (metaDirty) {
+        updated = await contestsApi.update(contestId, {
+          ...(titleDirty ? { title: title.trim() } : {}),
+          ...(hintsDirty ? { show_ai_hints: showAiHints } : {}),
+        });
       }
       if (groupsDirty) {
         updated = await contestsApi.updateGroups(
@@ -231,6 +241,24 @@ export default function EditContest() {
                 )}
               </>
             )}
+          </div>
+
+          <div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAiHints}
+                onChange={(e) => setShowAiHints(e.target.checked)}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Показывать AI-подсказки</span>
+                <span className="block text-gray-500 font-normal mt-0.5">
+                  Если выключено, участники не увидят блок подсказок на странице
+                  задачи в рамках этого контеста.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>
