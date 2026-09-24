@@ -24,7 +24,7 @@ export interface TokenResponse {
 }
 
 export type ContestStatus = "draft" | "running" | "finished";
-export type ExternalSource = "codeforces" | "informatics" | "leetcode";
+export type ExternalSource = "codeforces" | "informatics" | "leetcode" | "timus";
 export type SubmissionVerdict =
   | "pending"
   | "running"

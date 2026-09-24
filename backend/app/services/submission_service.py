@@ -230,7 +230,9 @@ async def _sync_user_submissions(
 
     repo = SubmissionRepository(session)
     existing = await repo.find_by_external_ids(
-        user_id, [row.external_id for row in relevant]
+        user_id,
+        info.problem_by_external_id[relevant[0].external_problem_id].external_source,
+        [row.external_id for row in relevant],
     )
 
     for row in relevant:

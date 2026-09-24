@@ -8,7 +8,7 @@ A contest is owned by exactly one teacher and is exposed to zero or more
 
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from app.models.problem import Problem
 from app.models.submission import Submission
 from app.models.user import User
 from app.repositories.contest_repo import ContestRepository
+from app.repositories.submission_repo import contest_submission_filter
 from app.services import problem_service
 
 
@@ -185,6 +186,11 @@ async def set_status(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
+    # Manual finish establishes the same cutoff as a scheduled deadline.
+    if status == ContestStatus.finished:
+        now = datetime.now(timezone.utc)
+        if contest.ends_at is None or contest.ends_at > now:
+            contest.ends_at = now
     contest.status = status
     await session.flush()
     return contest
@@ -197,6 +203,7 @@ async def update_contest(
     *,
     title: str | None = None,
     show_ai_hints: bool | None = None,
+    ends_at: datetime | None = None,
 ) -> Contest:
     """Update contest metadata. ``None`` values mean "leave as is"."""
     repo = ContestRepository(session)
@@ -211,6 +218,11 @@ async def update_contest(
         if not title:
             raise AppError("Title cannot be empty", 400)
         contest.title = title
+
+    if ends_at is not None:
+        if contest.starts_at is not None and ends_at <= contest.starts_at:
+            raise AppError("Время окончания должно быть позже времени начала", 422)
+        contest.ends_at = ends_at
 
     if show_ai_hints is not None:
         contest.show_ai_hints = show_ai_hints
@@ -378,7 +390,7 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
         submitters = await session.execute(
             select(User)
             .join(Submission, Submission.user_id == User.id)
-            .where(Submission.contest_id == contest_id)
+            .where(contest_submission_filter(contest_id))
             .distinct()
         )
         for u in submitters.scalars().unique().all():
@@ -394,7 +406,7 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
         subs = await session.execute(
             select(Submission)
             .where(
-                Submission.contest_id == contest_id,
+                contest_submission_filter(contest_id),
                 Submission.user_id.in_(users.keys()),
                 Submission.problem_id.in_(problem_ids),
             )

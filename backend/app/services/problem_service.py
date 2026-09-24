@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppError
 from app.integrations.judges import registry
 from app.models.enums import ExternalSource
 from app.models.problem import Problem
@@ -21,7 +22,12 @@ async def import_problem(
         return existing
 
     adapter = registry.get(source)
-    data = await adapter.fetch_problem(external_id)
+    try:
+        data = await adapter.fetch_problem(external_id)
+    except ValueError as exc:
+        raise AppError(str(exc), 422) from exc
+    except RuntimeError as exc:
+        raise AppError(str(exc), 502) from exc
 
     if data.external_id != external_id.upper():
         existing = await repo.get_by_external(source, data.external_id)

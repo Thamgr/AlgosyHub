@@ -10,6 +10,7 @@ export const JUDGE_PROBLEM_SOURCES: {
   label: string;
   placeholder: string;
 }[] = [
+  { value: "timus", label: "Timus", placeholder: "например: 1000" },
   { value: "codeforces", label: "Codeforces", placeholder: "например: 654B" },
   {
     value: "informatics",
@@ -41,6 +42,9 @@ export function getJudgeSubmitUrl(problem: Problem): string {
   if (problem.external_source === "informatics") {
     return `${problem.external_url}#submit`;
   }
+  if (problem.external_source === "timus") {
+    return `https://acm.timus.ru/submit.aspx?space=1&num=${encodeURIComponent(problem.external_id)}`;
+  }
   return problem.external_url;
 }
 
@@ -50,6 +54,8 @@ export function getJudgeLabel(source: Problem["external_source"]): string {
       return "Codeforces";
     case "informatics":
       return "Информатикс";
+    case "timus":
+      return "Timus";
     case "leetcode":
       return "LeetCode";
     default:

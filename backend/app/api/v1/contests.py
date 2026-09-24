@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -31,7 +32,13 @@ async def _to_response(session, contest: Contest) -> ContestResponse:
         group_id=contest.group_id,
         group_ids=group_ids,
         title=contest.title,
-        status=contest.status,
+        status=(
+            ContestStatus.finished
+            if contest.status == ContestStatus.running
+            and contest.ends_at is not None
+            and contest.ends_at <= datetime.now(timezone.utc)
+            else contest.status
+        ),
         starts_at=contest.starts_at,
         ends_at=contest.ends_at,
         show_ai_hints=contest.show_ai_hints,

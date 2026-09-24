@@ -23,6 +23,12 @@ export const JUDGE_SOURCES: {
   helpUrl?: string;
 }[] = [
   {
+    source: "timus",
+    label: "Timus",
+    placeholder: "ID автора из author.aspx?id=12345",
+    helpUrl: "https://acm.timus.ru/ranklist.aspx",
+  },
+  {
     source: "codeforces",
     label: "Codeforces",
     placeholder: "tourist",

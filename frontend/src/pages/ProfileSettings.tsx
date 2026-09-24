@@ -80,8 +80,8 @@ export default function ProfileSettings() {
         });
       }
       setSavedAt((m) => ({ ...m, [source]: Date.now() }));
-    } catch {
-      setError("Не удалось сохранить");
+    } catch (err: unknown) {
+      setError(getApiError(err, "Не удалось сохранить"));
     } finally {
       setSavingSource(null);
     }
@@ -142,7 +142,7 @@ export default function ProfileSettings() {
             Аккаунты на judge'ах
           </h2>
           <p className="text-xs text-gray-500 mb-4">
-            Укажите свой ник на внешнем сайте, чтобы AlgosyHub видел ваши
+            Укажите свой ник или числовой ID на внешнем сайте, чтобы AlgosyHub видел ваши
             посылки в контестах. Сдавать решения нужно прямо у судьи —
             мы только опрашиваем результаты.
           </p>

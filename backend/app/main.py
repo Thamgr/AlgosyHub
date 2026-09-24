@@ -16,6 +16,7 @@ from app.core.exceptions import register_exception_handlers
 from app.integrations.judges import registry
 from app.integrations.judges.codeforces import CodeforcesAdapter
 from app.integrations.judges.informatics import InformaticsAdapter
+from app.integrations.judges.timus import TimusAdapter
 from app.models.enums import ExternalSource
 from app.workers.submission_poller import create_scheduler
 
@@ -24,6 +25,7 @@ from app.workers.submission_poller import create_scheduler
 async def lifespan(app: FastAPI):
     registry.register(ExternalSource.codeforces, CodeforcesAdapter())
     registry.register(ExternalSource.informatics, InformaticsAdapter())
+    registry.register(ExternalSource.timus, TimusAdapter())
     scheduler = create_scheduler()
     scheduler.start()
     try:

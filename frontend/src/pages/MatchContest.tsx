@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import ContestDeadlineField from "../components/ContestDeadlineField";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
@@ -10,6 +11,7 @@ export default function MatchContest() {
   const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [tags, setTags] = useState<string[]>([]);
@@ -52,6 +54,7 @@ export default function MatchContest() {
     try {
       const contest = await contestsApi.match({
         title: title.trim(),
+        ends_at: new Date(endsAt).toISOString(),
         group_ids: Array.from(selectedGroups),
         tags: Array.from(selectedTags),
         rating_min: ratingMin ? Number(ratingMin) : undefined,
@@ -92,6 +95,8 @@ export default function MatchContest() {
               className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
 
           <div>
             <label className="block text-sm font-medium mb-1">
@@ -209,7 +214,7 @@ export default function MatchContest() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={loading || !title.trim()}
+              disabled={loading || !title.trim() || !endsAt}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? "Подбираем..." : "Подобрать контест"}

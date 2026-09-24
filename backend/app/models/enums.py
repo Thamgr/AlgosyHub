@@ -16,6 +16,7 @@ class ExternalSource(str, enum.Enum):
     codeforces = "codeforces"
     informatics = "informatics"
     leetcode = "leetcode"
+    timus = "timus"
 
 
 class SubmissionVerdict(str, enum.Enum):

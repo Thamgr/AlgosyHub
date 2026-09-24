@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import ContestDeadlineField from "../components/ContestDeadlineField";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
@@ -17,6 +18,7 @@ interface ProblemRow {
 export default function CreateContest() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [groups, setGroups] = useState<Group[]>([]);
@@ -63,6 +65,7 @@ export default function CreateContest() {
     try {
       const contest = await contestsApi.create({
         title: title.trim(),
+        ends_at: new Date(endsAt).toISOString(),
         group_ids: Array.from(selectedGroups),
         show_ai_hints: showAiHints,
       });
@@ -109,6 +112,8 @@ export default function CreateContest() {
               className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
 
           <div>
             <label className="block text-sm font-medium mb-1">
@@ -221,7 +226,7 @@ export default function CreateContest() {
               <span className="font-mono">contestId + index</span> (
               <span className="font-mono">1900A</span>). Информатикс —{" "}
               <span className="font-mono">chapterid</span> со страницы условия (
-              <span className="font-mono">10</span>).
+              <span className="font-mono">10</span>). Timus — номер задачи, например 1000.
             </p>
           </div>
 
@@ -239,7 +244,7 @@ export default function CreateContest() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={loading || !title.trim()}
+              disabled={loading || !title.trim() || !endsAt}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? "Создание..." : "Создать"}

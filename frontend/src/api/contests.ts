@@ -10,7 +10,7 @@ export interface CreateContestData {
   title: string;
   group_ids?: number[];
   starts_at?: string;
-  ends_at?: string;
+  ends_at: string;
   show_ai_hints?: boolean;
 }
 
@@ -22,11 +22,12 @@ export interface MatchContestData {
   rating_max?: number;
   count: number;
   starts_at?: string;
-  ends_at?: string;
+  ends_at: string;
   show_ai_hints?: boolean;
 }
 
 export interface UpdateContestData {
+  ends_at?: string;
   title?: string;
   show_ai_hints?: boolean;
 }

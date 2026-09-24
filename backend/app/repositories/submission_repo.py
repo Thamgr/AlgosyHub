@@ -1,7 +1,24 @@
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
+from app.models.contest import Contest
+from app.models.enums import ExternalSource
+from app.models.problem import Problem
 from app.models.submission import Submission
 from app.repositories.base import BaseRepository
+
+
+def contest_submission_filter(contest_id: int):
+    """Use the current deadline, including after edits, without deleting history.
+
+    A submission sent before the cutoff still counts when discovered/judged
+    afterwards. Late submissions remain available in the user's history and
+    become eligible if the teacher extends the deadline.
+    """
+    deadline = select(Contest.ends_at).where(Contest.id == contest_id).scalar_subquery()
+    return and_(
+        Submission.contest_id == contest_id,
+        or_(deadline.is_(None), Submission.created_at < deadline),
+    )
 
 
 class SubmissionRepository(BaseRepository[Submission]):
@@ -12,7 +29,7 @@ class SubmissionRepository(BaseRepository[Submission]):
     ) -> list[Submission]:
         stmt = (
             select(Submission)
-            .where(Submission.contest_id == contest_id)
+            .where(contest_submission_filter(contest_id))
             .order_by(Submission.created_at.desc())
         )
         if user_id is not None:
@@ -29,9 +46,9 @@ class SubmissionRepository(BaseRepository[Submission]):
         return list(result.scalars().all())
 
     async def find_by_external_ids(
-        self, user_id: int, external_ids: list[str]
+        self, user_id: int, source: ExternalSource, external_ids: list[str]
     ) -> dict[str, Submission]:
-        """Возвращает наши Submission-записи для пользователя по их CF-id.
+        """Возвращает наши Submission-записи для пользователя по id в пределах одного внешнего судьи.
 
         Используется поллером, чтобы понять — это новая посылка или обновление
         существующей.
@@ -39,8 +56,11 @@ class SubmissionRepository(BaseRepository[Submission]):
         if not external_ids:
             return {}
         result = await self.session.execute(
-            select(Submission).where(
+            select(Submission)
+            .join(Problem, Problem.id == Submission.problem_id)
+            .where(
                 Submission.user_id == user_id,
+                Problem.external_source == source,
                 Submission.external_submission_id.in_(external_ids),
             )
         )

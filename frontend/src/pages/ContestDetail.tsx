@@ -6,7 +6,7 @@ import { groupsApi } from "../api/groups";
 import { judgeAccountsApi } from "../api/judgeAccounts";
 import { submissionsApi } from "../api/submissions";
 import { useAuthStore } from "../store/auth";
-import { getJudgeLabel } from "../lib/judgeUrls";
+import { getJudgeLabel, JUDGE_PROBLEM_SOURCES, getProblemSourcePlaceholder } from "../lib/judgeUrls";
 import type {
   Contest,
   ExternalSource,
@@ -74,12 +74,19 @@ export default function ContestDetail() {
   const [tab, setTab] = useState<Tab>("problems");
 
   const [addInput, setAddInput] = useState("");
+  const [addSource, setAddSource] = useState<ExternalSource>("codeforces");
   const [addError, setAddError] = useState("");
   const [addLoading, setAddLoading] = useState(false);
 
   useEffect(() => {
-    contestsApi.get(contestId).then(setContest).catch(() => setContest(null));
+    let active = true;
+    const refresh = () => contestsApi.get(contestId).then((value) => {
+      if (active) setContest(value);
+    }).catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 15000);
     contestsApi.getProblems(contestId).then(setProblems);
+    return () => { active = false; clearInterval(timer); };
   }, [contestId]);
 
   useEffect(() => {
@@ -177,6 +184,7 @@ export default function ContestDetail() {
       const problem = await contestsApi.addProblem(
         contestId,
         addInput.trim().toUpperCase(),
+        addSource,
       );
       setProblems((prev) => [...prev, problem]);
       setAddInput("");
@@ -255,6 +263,15 @@ export default function ContestDetail() {
         )}
       </div>
 
+      {contest.ends_at && (
+        <p className="text-sm text-gray-600 mb-4">
+          Окончание: {new Date(contest.ends_at).toLocaleString()} ({Intl.DateTimeFormat().resolvedOptions().timeZone}).
+          {contest.status === "finished"
+            ? " Приём посылок в зачёт завершён."
+            : " Посылки, отправленные в это время или позже, не идут в зачёт."}
+        </p>
+      )}
+
       {missingSources.length > 0 && (
         <div className="mb-4 border border-yellow-300 bg-yellow-50 text-yellow-900 rounded p-3 text-sm">
           В этом контесте есть задачи с{" "}
@@ -264,7 +281,7 @@ export default function ContestDetail() {
               {i < missingSources.length - 1 ? ", " : ""}
             </span>
           ))}
-          . Чтобы AlgosyHub видел ваши посылки, укажите свой ник в{" "}
+          . Чтобы AlgosyHub видел ваши посылки, укажите свой ник или ID в{" "}
           <Link to="/settings" className="underline">настройках профиля</Link>.
         </div>
       )}
@@ -289,6 +306,8 @@ export default function ContestDetail() {
           contest={contest}
           isTeacher={isTeacher}
           solvedProblemIds={solvedProblemIds}
+          addSource={addSource}
+          setAddSource={setAddSource}
           addInput={addInput}
           setAddInput={setAddInput}
           addError={addError}
@@ -349,6 +368,8 @@ function ProblemsTab({
   contest,
   isTeacher,
   solvedProblemIds,
+  addSource,
+  setAddSource,
   addInput,
   setAddInput,
   addError,
@@ -359,6 +380,8 @@ function ProblemsTab({
   contest: Contest;
   isTeacher: boolean;
   solvedProblemIds: Set<number>;
+  addSource: ExternalSource;
+  setAddSource: (source: ExternalSource) => void;
   addInput: string;
   setAddInput: (s: string) => void;
   addError: string;
@@ -424,10 +447,20 @@ function ProblemsTab({
 
       {isTeacher && contest.status === "draft" && (
         <form onSubmit={onAdd} className="flex gap-2 mt-3">
+          <select
+            aria-label="Источник задачи"
+            value={addSource}
+            onChange={(event) => setAddSource(event.target.value as ExternalSource)}
+            className="border rounded px-2 py-2 text-sm bg-white"
+          >
+            {JUDGE_PROBLEM_SOURCES.map((source) => (
+              <option key={source.value} value={source.value}>{source.label}</option>
+            ))}
+          </select>
           <input
             value={addInput}
             onChange={(e) => setAddInput(e.target.value)}
-            placeholder="Например: 654B"
+            placeholder={getProblemSourcePlaceholder(addSource)}
             className="flex-1 border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import ContestDeadlineField from "../components/ContestDeadlineField";
+import { toLocalDateTime } from "../lib/dateTime";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
@@ -22,6 +24,7 @@ export default function EditContest() {
   const [groups, setGroups] = useState<Group[]>([]);
 
   const [title, setTitle] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
 
@@ -48,6 +51,7 @@ export default function EditContest() {
       .then((c) => {
         setContest(c);
         setTitle(c.title);
+        setEndsAt(toLocalDateTime(c.ends_at));
         setShowAiHints(c.show_ai_hints);
         setSelectedGroups(new Set(c.group_ids));
       })
@@ -71,7 +75,8 @@ export default function EditContest() {
     () => contest != null && showAiHints !== contest.show_ai_hints,
     [contest, showAiHints],
   );
-  const isDirty = titleDirty || groupsDirty || hintsDirty;
+  const deadlineDirty = contest != null && toLocalDateTime(endsAt) !== toLocalDateTime(contest.ends_at);
+  const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty;
   const isDraft = contest?.status === "draft";
 
   function toggleGroup(gid: number) {
@@ -138,10 +143,11 @@ export default function EditContest() {
     setSaving(true);
     try {
       let updated = contest;
-      const metaDirty = titleDirty || hintsDirty;
+      const metaDirty = titleDirty || hintsDirty || deadlineDirty;
       if (metaDirty) {
         updated = await contestsApi.update(contestId, {
           ...(titleDirty ? { title: title.trim() } : {}),
+          ...(deadlineDirty ? { ends_at: new Date(endsAt).toISOString() } : {}),
           ...(hintsDirty ? { show_ai_hints: showAiHints } : {}),
         });
       }
@@ -152,6 +158,7 @@ export default function EditContest() {
         );
       }
       setContest(updated);
+      setEndsAt(toLocalDateTime(updated.ends_at));
       setSavedAt(Date.now());
     } catch (err: unknown) {
       setError(getApiError(err, "Не удалось сохранить изменения"));
@@ -242,6 +249,8 @@ export default function EditContest() {
               </>
             )}
           </div>
+
+          <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
 
           <div>
             <label className="flex items-start gap-2 cursor-pointer">
@@ -346,7 +355,7 @@ export default function EditContest() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !isDirty || !title.trim()}
+              disabled={saving || !isDirty || !title.trim() || (deadlineDirty && !endsAt)}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? "Сохранение..." : "Сохранить"}

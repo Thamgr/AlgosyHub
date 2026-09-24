@@ -1,18 +1,27 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import ContestStatus, ExternalSource
 
 
-class ContestCreate(BaseModel):
+class ContestTiming(BaseModel):
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_window(self):
+        if self.starts_at is not None and self.ends_at <= self.starts_at:
+            raise ValueError("Время окончания должно быть позже времени начала")
+        return self
+
+
+class ContestCreate(ContestTiming):
     title: str
     # Legacy single-group form — still accepted.
     group_id: int | None = None
     # New many-to-many form. If non-empty, takes precedence over ``group_id``.
     group_ids: list[int] = Field(default_factory=list)
-    starts_at: datetime | None = None
-    ends_at: datetime | None = None
     show_ai_hints: bool = True
 
 
@@ -39,6 +48,14 @@ class ContestUpdate(BaseModel):
 
     title: str | None = None
     show_ai_hints: bool | None = None
+    ends_at: AwareDatetime | None = None
+
+    @field_validator("ends_at")
+    @classmethod
+    def deadline_cannot_be_removed(cls, value):
+        if value is None:
+            raise ValueError("Укажите дату и время окончания")
+        return value
 
 
 class AddProblemRequest(BaseModel):
@@ -66,13 +83,11 @@ class ScoreboardResponse(BaseModel):
     rows: list[ScoreboardRowResponse]
 
 
-class MatchContestRequest(BaseModel):
+class MatchContestRequest(ContestTiming):
     title: str
     group_ids: list[int] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     rating_min: int | None = None
     rating_max: int | None = None
     count: int = Field(default=5, ge=1, le=15)
-    starts_at: datetime | None = None
-    ends_at: datetime | None = None
     show_ai_hints: bool = True
