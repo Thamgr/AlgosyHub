@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, StrictBool, field_validator, model_validator
 
 from app.models.enums import ContestStatus, ExternalSource
 
@@ -8,6 +8,7 @@ from app.models.enums import ContestStatus, ExternalSource
 class ContestTiming(BaseModel):
     starts_at: AwareDatetime | None = None
     ends_at: AwareDatetime
+    is_visible: StrictBool = True
 
     @model_validator(mode="after")
     def validate_window(self):
@@ -34,6 +35,7 @@ class ContestResponse(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     show_ai_hints: bool
+    is_visible: bool
 
     model_config = {"from_attributes": True}
 
@@ -49,6 +51,8 @@ class ContestUpdate(BaseModel):
     title: str | None = None
     show_ai_hints: bool | None = None
     ends_at: AwareDatetime | None = None
+    starts_at: AwareDatetime | None = None
+    is_visible: StrictBool = True
 
     @field_validator("ends_at")
     @classmethod

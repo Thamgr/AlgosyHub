@@ -9,7 +9,8 @@ import type {
 export interface CreateContestData {
   title: string;
   group_ids?: number[];
-  starts_at?: string;
+  starts_at?: string | null;
+  is_visible?: boolean;
   ends_at: string;
   show_ai_hints?: boolean;
 }
@@ -21,12 +22,15 @@ export interface MatchContestData {
   rating_min?: number;
   rating_max?: number;
   count: number;
-  starts_at?: string;
+  starts_at?: string | null;
+  is_visible?: boolean;
   ends_at: string;
   show_ai_hints?: boolean;
 }
 
 export interface UpdateContestData {
+  starts_at?: string | null;
+  is_visible?: boolean;
   ends_at?: string;
   title?: string;
   show_ai_hints?: boolean;

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
+import ContestStartField from "../components/ContestStartField";
+import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
@@ -11,6 +14,8 @@ export default function MatchContest() {
   const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [isVisible, setIsVisible] = useState(true);
   const [endsAt, setEndsAt] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -54,6 +59,8 @@ export default function MatchContest() {
     try {
       const contest = await contestsApi.match({
         title: title.trim(),
+        starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+        is_visible: isVisible,
         ends_at: new Date(endsAt).toISOString(),
         group_ids: Array.from(selectedGroups),
         tags: Array.from(selectedTags),
@@ -96,7 +103,9 @@ export default function MatchContest() {
             />
           </div>
 
+          <ContestStartField value={startsAt} onChange={setStartsAt} />
           <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
+          <ContestVisibilityField checked={isVisible} onChange={setIsVisible} />
 
           <div>
             <label className="block text-sm font-medium mb-1">

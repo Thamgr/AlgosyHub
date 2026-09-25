@@ -3,7 +3,9 @@ export type UserRole = "student" | "teacher";
 export interface User {
   id: number;
   username: string;
+  full_name: string;
   role: UserRole;
+  is_platform_admin?: boolean;
 }
 
 export interface UserStats {
@@ -60,6 +62,7 @@ export interface Contest {
   title: string;
   status: ContestStatus;
   starts_at: string | null;
+  is_visible: boolean;
   ends_at: string | null;
   show_ai_hints: boolean;
 }
@@ -101,6 +104,17 @@ export interface ScoreboardRow {
 export interface Scoreboard {
   problem_ids: number[];
   rows: ScoreboardRow[];
+}
+
+export interface GroupScoreboard {
+  contests: { id: number; title: string; problems: Problem[] }[];
+  rows: {
+    user_id: number;
+    username: string;
+    solved: number;
+    attempts_total: number;
+    cells: (ScoreboardCell & { contest_id: number })[];
+  }[];
 }
 
 export interface ProblemHints {

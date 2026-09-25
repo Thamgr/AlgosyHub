@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
+import ContestTimer from "../components/ContestTimer";
 import { judgeAccountsApi } from "../api/judgeAccounts";
 import { submissionsApi } from "../api/submissions";
-import { useAuthStore } from "../store/auth";
+import { useViewMode } from "../hooks/useViewMode";
 import { getJudgeLabel, JUDGE_PROBLEM_SOURCES, getProblemSourcePlaceholder } from "../lib/judgeUrls";
 import type {
   Contest,
@@ -58,10 +60,10 @@ type Tab = "problems" | "scoreboard" | "mine";
 export default function ContestDetail() {
   const { id } = useParams<{ id: string }>();
   const contestId = Number(id);
-  const user = useAuthStore((s) => s.user);
-  const isTeacher = user?.role === "teacher";
+  const { isTeacher, isStudentView } = useViewMode();
 
   const [contest, setContest] = useState<Contest | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [submissionsAt, setSubmissionsAt] = useState<number | null>(null);
@@ -81,11 +83,16 @@ export default function ContestDetail() {
   useEffect(() => {
     let active = true;
     const refresh = () => contestsApi.get(contestId).then((value) => {
-      if (active) setContest(value);
-    }).catch(() => {});
+      if (active) {
+        setContest(value);
+        setLoadError("");
+      }
+    }).catch(() => {
+      if (active) setLoadError("Контест недоступен. Он мог быть скрыт преподавателем.");
+    });
     refresh();
     const timer = setInterval(refresh, 15000);
-    contestsApi.getProblems(contestId).then(setProblems);
+    contestsApi.getProblems(contestId).then(setProblems).catch(() => {});
     return () => { active = false; clearInterval(timer); };
   }, [contestId]);
 
@@ -196,14 +203,22 @@ export default function ContestDetail() {
   }
 
   async function handleStart() {
-    const updated = await contestsApi.start(contestId);
-    setContest(updated);
+    try {
+      const updated = await contestsApi.start(contestId);
+      setContest(updated);
+      setAddError("");
+    } catch (err: unknown) {
+      setAddError(getApiError(err, "Не удалось запустить контест"));
+    }
   }
 
   async function handleFinish() {
     const updated = await contestsApi.finish(contestId);
     setContest(updated);
   }
+
+  if (loadError || (isStudentView && contest && !contest.is_visible))
+    return <div className="p-6 text-sm text-gray-500"><Link to="/" className="text-blue-600">← Назад</Link><p className="mt-4">{loadError || "Контест скрыт от учеников."}</p></div>;
 
   if (!contest)
     return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
@@ -216,11 +231,15 @@ export default function ContestDetail() {
       <Link to="/" className="text-sm text-gray-400 hover:underline">
         ← Назад
       </Link>
-      <div className="flex items-center justify-between mb-4 mt-1">
-        <div>
-          <h1 className="text-xl font-semibold">{contest.title}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-6 mb-4 mt-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="min-w-0 break-words text-xl font-semibold">{contest.title}</h1>
+            <ContestTimer contest={contest} />
+          </div>
           <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
             <span className="px-2 py-0.5 rounded bg-gray-100">{contest.status}</span>
+            {!contest.is_visible && <span className="text-amber-700">Скрыт от участников</span>}
             {contest.group_ids.length > 0 && (
               <span className="text-gray-400">·</span>
             )}
@@ -263,12 +282,10 @@ export default function ContestDetail() {
         )}
       </div>
 
-      {contest.ends_at && (
-        <p className="text-sm text-gray-600 mb-4">
-          Окончание: {new Date(contest.ends_at).toLocaleString()} ({Intl.DateTimeFormat().resolvedOptions().timeZone}).
-          {contest.status === "finished"
-            ? " Приём посылок в зачёт завершён."
-            : " Посылки, отправленные в это время или позже, не идут в зачёт."}
+      {contest.starts_at && (
+        <p className="text-sm text-gray-600 mb-2">
+          Начало: {new Date(contest.starts_at).toLocaleString()} ({Intl.DateTimeFormat().resolvedOptions().timeZone}).
+          {contest.status === "draft" ? " Запуск по расписанию." : " Посылки до начала не идут в зачёт."}
         </p>
       )}
 

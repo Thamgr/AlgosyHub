@@ -27,6 +27,8 @@ from app.repositories.contest_repo import ContestRepository
 from app.repositories.submission_repo import contest_submission_filter
 from app.services import problem_service
 
+_UNSET = object()
+
 
 @dataclass
 class ScoreboardCell:
@@ -53,6 +55,7 @@ async def create_contest(
     ends_at: datetime | None,
     *,
     show_ai_hints: bool = True,
+    is_visible: bool = True,
 ) -> Contest:
     repo = ContestRepository(session)
     # Legacy ``group_id`` keeps the first attached group so old code paths
@@ -65,6 +68,7 @@ async def create_contest(
         starts_at=starts_at,
         ends_at=ends_at,
         show_ai_hints=show_ai_hints,
+        is_visible=is_visible,
     )
     if group_ids:
         await repo.set_groups(contest.id, group_ids)
@@ -90,8 +94,8 @@ async def get_contest_for_user(
     return contest
 
 
-async def list_contests_for_group(session: AsyncSession, group_id: int) -> list[Contest]:
-    return await ContestRepository(session).get_by_group(group_id)
+async def list_contests_for_group(session: AsyncSession, group_id: int, user_id: int) -> list[Contest]:
+    return await ContestRepository(session).get_by_group(group_id, user_id)
 
 
 async def list_contests_for_user(
@@ -144,7 +148,7 @@ async def add_problem(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
-    if contest.status != ContestStatus.draft:
+    if contest.effective_status() != ContestStatus.draft:
         raise AppError("Cannot modify a running or finished contest", 400)
 
     problem = await problem_service.import_problem(session, source, external_id)
@@ -187,6 +191,14 @@ async def set_status(
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
     # Manual finish establishes the same cutoff as a scheduled deadline.
+    if status == ContestStatus.running:
+        now = datetime.now(timezone.utc)
+        if contest.ends_at is not None and contest.ends_at <= now:
+            raise AppError("Перед запуском укажите время окончания в будущем", 422)
+        # Starting a scheduled contest early starts its scoring window now.
+        # Legacy contests without a start keep their historical scoring behavior.
+        if contest.starts_at is not None and contest.starts_at > now:
+            contest.starts_at = now
     if status == ContestStatus.finished:
         now = datetime.now(timezone.utc)
         if contest.ends_at is None or contest.ends_at > now:
@@ -204,14 +216,21 @@ async def update_contest(
     title: str | None = None,
     show_ai_hints: bool | None = None,
     ends_at: datetime | None = None,
+    starts_at: datetime | None | object = _UNSET,
+    is_visible: bool | None = None,
 ) -> Contest:
-    """Update contest metadata. ``None`` values mean "leave as is"."""
+    """Update metadata; an explicitly null start clears the schedule."""
     repo = ContestRepository(session)
     contest = await repo.get(contest_id)
     if not contest:
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
+
+    new_start = contest.starts_at if starts_at is _UNSET else starts_at
+    new_end = contest.ends_at if ends_at is None else ends_at
+    if new_start is not None and new_end is not None and new_end <= new_start:
+        raise AppError("Время окончания должно быть позже времени начала", 422)
 
     if title is not None:
         title = title.strip()
@@ -220,9 +239,13 @@ async def update_contest(
         contest.title = title
 
     if ends_at is not None:
-        if contest.starts_at is not None and ends_at <= contest.starts_at:
-            raise AppError("Время окончания должно быть позже времени начала", 422)
         contest.ends_at = ends_at
+
+    if starts_at is not _UNSET:
+        contest.starts_at = starts_at
+
+    if is_visible is not None:
+        contest.is_visible = is_visible
 
     if show_ai_hints is not None:
         contest.show_ai_hints = show_ai_hints
@@ -258,7 +281,7 @@ async def remove_problem(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
-    if contest.status != ContestStatus.draft:
+    if contest.effective_status() != ContestStatus.draft:
         raise AppError("Cannot modify a running or finished contest", 400)
 
     existing = await repo.get_problems(contest_id)
@@ -284,6 +307,7 @@ async def create_matched_contest(
     starts_at: datetime | None,
     ends_at: datetime | None,
     show_ai_hints: bool = True,
+    is_visible: bool = True,
 ) -> Contest:
     """Pull the full CF problemset, filter by tag+rating, pick ``count`` at random.
 
@@ -331,6 +355,7 @@ async def create_matched_contest(
         starts_at=starts_at,
         ends_at=ends_at,
         show_ai_hints=show_ai_hints,
+        is_visible=is_visible,
     )
 
     repo = ContestRepository(session)

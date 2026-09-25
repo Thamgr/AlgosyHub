@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { useAuthStore } from "../store/auth";
+import { useViewMode } from "../hooks/useViewMode";
 
 /**
  * Шапка приложения.
@@ -11,6 +12,7 @@ import { useAuthStore } from "../store/auth";
  */
 export default function AppHeader() {
   const user = useAuthStore((s) => s.user);
+  const { isStudentView, isPlatformAdmin } = useViewMode();
 
   return (
     <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
@@ -18,13 +20,18 @@ export default function AppHeader() {
         AlgosyHub
       </Link>
       <div className="flex items-center gap-4 text-sm">
+        {isPlatformAdmin && (
+          <Link to="/platform-settings" className="text-blue-600 hover:underline">
+            Настройки платформы
+          </Link>
+        )}
         {user ? (
           <Link
             to={`/u/${user.username}`}
             className="text-gray-700 hover:underline"
           >
             {user.username}{" "}
-            <span className="text-xs text-gray-400">({user.role})</span>
+            <span className="text-xs text-gray-400">({isStudentView ? "student" : user.role})</span>
           </Link>
         ) : (
           <Link to="/login" className="text-blue-600 hover:underline">

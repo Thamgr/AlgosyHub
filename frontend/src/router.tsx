@@ -1,5 +1,7 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import Navigate from "./components/ViewNavigate";
 import { useAuthStore } from "./store/auth";
+import { useViewMode } from "./hooks/useViewMode";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -13,6 +15,7 @@ import MatchContest from "./pages/MatchContest";
 import ProblemDetail from "./pages/ProblemDetail";
 import ProfileSettings from "./pages/ProfileSettings";
 import UserProfile from "./pages/UserProfile";
+import PlatformSettings from "./pages/PlatformSettings";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -21,9 +24,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function RequireTeacher({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((s) => s.user);
-  if (user?.role !== "teacher") return <Navigate to="/" replace />;
+  const { isTeacher } = useViewMode();
+  if (!isTeacher) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+function HideInStudentView({ children }: { children: React.ReactNode }) {
+  const { isStudentView } = useViewMode();
+  return isStudentView ? <Navigate to="/" replace /> : <>{children}</>;
 }
 
 export default function Router() {
@@ -60,6 +68,7 @@ export default function Router() {
               />
               <Route path="/problems/:id" element={<ProblemDetail />} />
               <Route path="/settings" element={<ProfileSettings />} />
+              <Route path="/platform-settings" element={<HideInStudentView><PlatformSettings /></HideInStudentView>} />
             </Routes>
           </RequireAuth>
         }

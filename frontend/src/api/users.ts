@@ -10,6 +10,6 @@ export const usersApi = {
 };
 
 export const meApi = {
-  updateUsername: (username: string) =>
-    api.patch<User>("/api/v1/me", { username }).then((r) => r.data),
+  updateProfile: (profile: Pick<User, "full_name">) =>
+    api.patch<User>("/api/v1/me", profile).then((r) => r.data),
 };

@@ -7,6 +7,14 @@ from app.models.submission import Submission
 from app.repositories.base import BaseRepository
 
 
+def submission_in_window(start, deadline):
+    """Shared inclusive-start, exclusive-end scoring window."""
+    return and_(
+        or_(start.is_(None), Submission.created_at >= start),
+        or_(deadline.is_(None), Submission.created_at < deadline),
+    )
+
+
 def contest_submission_filter(contest_id: int):
     """Use the current deadline, including after edits, without deleting history.
 
@@ -15,9 +23,10 @@ def contest_submission_filter(contest_id: int):
     become eligible if the teacher extends the deadline.
     """
     deadline = select(Contest.ends_at).where(Contest.id == contest_id).scalar_subquery()
+    start = select(Contest.starts_at).where(Contest.id == contest_id).scalar_subquery()
     return and_(
         Submission.contest_id == contest_id,
-        or_(deadline.is_(None), Submission.created_at < deadline),
+        submission_in_window(start, deadline),
     )
 
 

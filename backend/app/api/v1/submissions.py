@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.core.deps import CurrentUserID, SessionDep
 from app.schemas.submission import SubmissionResponse
-from app.services import submission_service
+from app.services import contest_service, submission_service
 
 router = APIRouter(tags=["submissions"])
 
@@ -24,6 +24,7 @@ async def list_contest_submissions(
     mine: bool = False,
     user_id: int | None = None,
 ):
+    await contest_service.get_contest_for_user(session, contest_id, current_user_id)
     target_user_id: int | None = None
     if mine:
         target_user_id = current_user_id

@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { groupsApi } from "../api/groups";
-import { useAuthStore } from "../store/auth";
+import { useViewMode } from "../hooks/useViewMode";
 import AppHeader from "../components/AppHeader";
 import type { Group } from "../api/types";
 
 export default function Groups() {
-  const user = useAuthStore((s) => s.user);
-  const isTeacher = user?.role === "teacher";
+  const { isTeacher } = useViewMode();
 
   const [groups, setGroups] = useState<Group[] | null>(null);
 

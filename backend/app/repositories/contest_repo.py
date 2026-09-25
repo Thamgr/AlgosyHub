@@ -1,4 +1,4 @@
-from sqlalchemy import delete, or_, select
+from sqlalchemy import and_, delete, or_, select
 
 from app.models.contest import Contest, contest_groups, contest_problems
 from app.models.group import group_members
@@ -9,11 +9,12 @@ from app.repositories.base import BaseRepository
 class ContestRepository(BaseRepository[Contest]):
     model = Contest
 
-    async def get_by_group(self, group_id: int) -> list[Contest]:
+    async def get_by_group(self, group_id: int, user_id: int) -> list[Contest]:
         result = await self.session.execute(
             select(Contest)
             .join(contest_groups, contest_groups.c.contest_id == Contest.id)
             .where(contest_groups.c.group_id == group_id)
+            .where(self.access_filter(user_id))
             .order_by(Contest.id.desc())
         )
         return list(result.scalars().unique().all())
@@ -26,15 +27,13 @@ class ContestRepository(BaseRepository[Contest]):
         )
         return list(result.scalars().all())
 
-    async def get_for_user(self, user_id: int) -> list[Contest]:
-        """Contests visible to a student.
-
-        A contest is visible if it has no group tags (public) or the student
-        belongs to at least one of its group tags.
-        """
+    @staticmethod
+    def access_filter(user_id: int):
+        """Owners always have access; others need visibility and group access."""
         has_any_group = (
             select(contest_groups.c.contest_id)
             .where(contest_groups.c.contest_id == Contest.id)
+            .correlate(Contest)
             .exists()
         )
         user_in_group = (
@@ -47,11 +46,18 @@ class ContestRepository(BaseRepository[Contest]):
                 contest_groups.c.contest_id == Contest.id,
                 group_members.c.user_id == user_id,
             )
+            .correlate(Contest)
             .exists()
         )
+        return or_(
+            Contest.teacher_id == user_id,
+            and_(Contest.is_visible.is_(True), or_(~has_any_group, user_in_group)),
+        )
+
+    async def get_for_user(self, user_id: int) -> list[Contest]:
         result = await self.session.execute(
             select(Contest)
-            .where(or_(~has_any_group, user_in_group))
+            .where(self.access_filter(user_id))
             .order_by(Contest.id.desc())
         )
         return list(result.scalars().unique().all())
@@ -123,28 +129,7 @@ class ContestRepository(BaseRepository[Contest]):
         )
 
     async def user_can_access(self, contest_id: int, user_id: int) -> bool:
-        """True if user is the teacher, the contest has no group tags (public),
-        or the user is a member of any of the contest's groups."""
-        teacher_row = await self.session.execute(
-            select(Contest.teacher_id).where(Contest.id == contest_id)
+        result = await self.session.execute(
+            select(Contest.id).where(Contest.id == contest_id, self.access_filter(user_id))
         )
-        teacher_id = teacher_row.scalar_one_or_none()
-        if teacher_id is None:
-            return False
-        if teacher_id == user_id:
-            return True
-
-        group_ids = await self.get_group_ids(contest_id)
-        if not group_ids:
-            return True
-
-        membership = await self.session.execute(
-            select(contest_groups.c.group_id)
-            .join(group_members, group_members.c.group_id == contest_groups.c.group_id)
-            .where(
-                contest_groups.c.contest_id == contest_id,
-                group_members.c.user_id == user_id,
-            )
-            .limit(1)
-        )
-        return membership.first() is not None
+        return result.scalar_one_or_none() is not None

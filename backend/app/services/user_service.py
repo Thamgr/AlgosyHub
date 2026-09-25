@@ -1,12 +1,8 @@
-import re
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
-
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 
 
 async def get_by_username(session: AsyncSession, username: str) -> User:
@@ -27,26 +23,17 @@ async def get_stats(session: AsyncSession, user_id: int) -> dict:
     }
 
 
-async def rename(session: AsyncSession, user_id: int, new_username: str) -> User:
-    new_username = new_username.strip()
-    if not USERNAME_RE.match(new_username):
-        raise AppError(
-            "Username должен быть 3–32 символа: латиница, цифры, _ . -", 400
-        )
-
-    repo = UserRepository(session)
-    user = await repo.get(user_id)
+async def update_profile(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    full_name: str | None = None,
+) -> User:
+    user = await UserRepository(session).get(user_id)
     if not user:
         raise AppError("Пользователь не найден", 404)
-
-    if user.username == new_username:
-        return user
-
-    existing = await repo.get_by_username(new_username)
-    if existing and existing.id != user_id:
-        raise AppError("Username уже занят", 409)
-
-    user.username = new_username
+    if full_name is not None:
+        user.full_name = full_name
     await session.flush()
     await session.refresh(user)
     return user

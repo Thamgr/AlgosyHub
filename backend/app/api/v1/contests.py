@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -32,16 +31,11 @@ async def _to_response(session, contest: Contest) -> ContestResponse:
         group_id=contest.group_id,
         group_ids=group_ids,
         title=contest.title,
-        status=(
-            ContestStatus.finished
-            if contest.status == ContestStatus.running
-            and contest.ends_at is not None
-            and contest.ends_at <= datetime.now(timezone.utc)
-            else contest.status
-        ),
+        status=contest.effective_status(),
         starts_at=contest.starts_at,
         ends_at=contest.ends_at,
         show_ai_hints=contest.show_ai_hints,
+        is_visible=contest.is_visible,
     )
 
 
@@ -56,7 +50,7 @@ async def list_contests(
     group_id: int | None = None,
 ):
     if group_id is not None:
-        contests = await contest_service.list_contests_for_group(session, group_id)
+        contests = await contest_service.list_contests_for_group(session, group_id, user.id)
     else:
         contests = await contest_service.list_contests_for_user(
             session, user.id, user.role
@@ -78,6 +72,7 @@ async def create_contest(body: ContestCreate, session: SessionDep, teacher_id: T
         body.starts_at,
         body.ends_at,
         show_ai_hints=body.show_ai_hints,
+        is_visible=body.is_visible,
     )
     await session.commit()
     return await _to_response(session, contest)
@@ -100,6 +95,7 @@ async def match_contest(
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         show_ai_hints=body.show_ai_hints,
+        is_visible=body.is_visible,
     )
     await session.commit()
     return await _to_response(session, contest)

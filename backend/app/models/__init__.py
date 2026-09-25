@@ -7,10 +7,12 @@ from app.models.problem import Problem
 from app.models.problem_hint import ProblemHint
 from app.models.submission import Submission
 from app.models.user import User
+from app.models.platform_settings import PlatformSettings
 
 __all__ = [
     "Base",
     "User",
+    "PlatformSettings",
     "Group",
     "group_members",
     "Problem",

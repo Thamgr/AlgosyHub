@@ -1,23 +1,26 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { contestsApi } from "../api/contests";
 import { problemsApi } from "../api/problems";
 import { getApiError } from "../api/errors";
-import { useAuthStore } from "../store/auth";
+import { useViewMode } from "../hooks/useViewMode";
+import { usePlatformSettings } from "../store/platformSettings";
 import { getJudgeLabel, getJudgeSubmitUrl } from "../lib/judgeUrls";
 import type { Contest, Problem, ProblemHints } from "../api/types";
 
 export default function ProblemDetail() {
+  const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
   const { id } = useParams<{ id: string }>();
   const problemId = Number(id);
   const [search] = useSearchParams();
   const contestIdParam = search.get("contest");
   const contestId = contestIdParam ? Number(contestIdParam) : null;
-  const user = useAuthStore((s) => s.user);
-  const isTeacher = user?.role === "teacher";
+  const { isTeacher, isStudentView } = useViewMode();
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [contest, setContest] = useState<Contest | null>(null);
+  const [failedContestId, setFailedContestId] = useState<number | null>(null);
   const [hints, setHints] = useState<ProblemHints | null>(null);
   const [revealed, setRevealed] = useState<0 | 1 | 2 | 3>(0);
   const [hintsLoading, setHintsLoading] = useState(false);
@@ -29,13 +32,18 @@ export default function ProblemDetail() {
 
   useEffect(() => {
     if (contestId == null || Number.isNaN(contestId)) {
-      setContest(null);
       return;
     }
+    let active = true;
     contestsApi
       .get(contestId)
-      .then(setContest)
-      .catch(() => setContest(null));
+      .then((value) => {
+        if (active) { setContest(value); setFailedContestId(null); }
+      })
+      .catch(() => {
+        if (active) { setContest(null); setFailedContestId(contestId); }
+      });
+    return () => { active = false; };
   }, [contestId]);
 
   async function loadHints() {
@@ -72,6 +80,13 @@ export default function ProblemDetail() {
     }
   }
 
+  if (isStudentView && contestId != null) {
+    if (Number.isNaN(contestId) || failedContestId === contestId || (contest?.id === contestId && !contest.is_visible)) {
+      return <div className="p-6 text-sm text-gray-500"><Link to="/" className="text-blue-600">← Назад</Link><p className="mt-4">Контест недоступен ученикам.</p></div>;
+    }
+    if (contest?.id !== contestId) return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
+  }
+
   if (!problem)
     return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
 
@@ -82,7 +97,7 @@ export default function ProblemDetail() {
 
   const backHref = contestId != null ? `/contests/${contestId}` : "/";
   const showHints =
-    contestId == null || contest?.show_ai_hints !== false;
+    aiHintsEnabled && (contestId == null || (contest?.id === contestId && contest.show_ai_hints));
 
   return (
     <div className="min-h-screen bg-gray-50">

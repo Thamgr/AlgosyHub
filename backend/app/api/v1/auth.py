@@ -2,13 +2,14 @@ from fastapi import APIRouter
 
 from app.core.deps import CurrentUserID, SessionDep
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.services import auth_service
+from app.services import auth_service, platform_settings_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(body: RegisterRequest, session: SessionDep):
+    await platform_settings_service.require_registration(session)
     user = await auth_service.register(
         session, body.username, body.password, body.role
     )

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.deps import CurrentUserID, SessionDep
 from app.models.enums import ExternalSource
-from app.schemas.auth import UpdateUsernameRequest, UserResponse
+from app.schemas.auth import UpdateProfileRequest, UserResponse
 from app.schemas.judge_account import JudgeAccountResponse, JudgeAccountUpsert
 from app.services import judge_account_service, user_service
 
@@ -11,9 +11,11 @@ router = APIRouter(prefix="/me", tags=["me"])
 
 @router.patch("", response_model=UserResponse)
 async def update_me(
-    body: UpdateUsernameRequest, session: SessionDep, user_id: CurrentUserID
+    body: UpdateProfileRequest, session: SessionDep, user_id: CurrentUserID
 ):
-    user = await user_service.rename(session, user_id, body.username)
+    user = await user_service.update_profile(
+        session, user_id, **body.model_dump(exclude_unset=True)
+    )
     await session.commit()
     return user
 

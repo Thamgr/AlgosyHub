@@ -7,8 +7,8 @@ from app.core.deps import CurrentUser, CurrentUserID, SessionDep, require_role
 from app.models.enums import UserRole
 from app.schemas.auth import UserResponse
 from app.schemas.contest import ContestResponse
-from app.schemas.group import GroupCreate, GroupResponse
-from app.services import contest_service, group_service
+from app.schemas.group import GroupCreate, GroupResponse, GroupScoreboardResponse
+from app.services import contest_service, group_service, group_scoreboard_service
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -49,8 +49,8 @@ async def add_member(
 
 
 @router.get("/{group_id}/contests", response_model=list[ContestResponse])
-async def list_group_contests(group_id: int, session: SessionDep, _: CurrentUserID):
-    contests = await contest_service.list_contests_for_group(session, group_id)
+async def list_group_contests(group_id: int, session: SessionDep, user_id: CurrentUserID):
+    contests = await contest_service.list_contests_for_group(session, group_id, user_id)
     return await _to_responses(session, contests)
 
 
@@ -60,3 +60,8 @@ async def remove_member(
 ):
     await group_service.remove_member(session, group_id, teacher_id, user_id)
     await session.commit()
+
+
+@router.get("/{group_id}/scoreboard", response_model=GroupScoreboardResponse)
+async def group_scoreboard(group_id: int, session: SessionDep, user_id: CurrentUserID):
+    return await group_scoreboard_service.scoreboard(session, group_id, user_id)

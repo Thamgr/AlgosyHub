@@ -16,8 +16,10 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       setToken: (token) => {
-        localStorage.setItem("token", token);
-        set({ token });
+        // The persisted auth store is the single source of truth. Remove the
+        // legacy duplicate, which could disagree with the restored session.
+        localStorage.removeItem("token");
+        set({ token, user: null });
       },
       setUser: (user) => set({ user }),
       logout: () => {

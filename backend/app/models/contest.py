@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -37,4 +37,18 @@ class Contest(Base):
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     show_ai_hints: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    def effective_status(self, now: datetime | None = None) -> ContestStatus:
+        now = now or datetime.now(timezone.utc)
+        if self.status == ContestStatus.finished:
+            return ContestStatus.finished
+        started = self.status == ContestStatus.running or (
+            self.starts_at is not None and self.starts_at <= now
+        )
+        if not started:
+            return ContestStatus.draft
+        if self.ends_at is not None and self.ends_at <= now:
+            return ContestStatus.finished
+        return ContestStatus.running

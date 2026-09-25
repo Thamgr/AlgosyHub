@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { contestsApi } from "../api/contests";
 import { groupsApi } from "../api/groups";
-import { useAuthStore } from "../store/auth";
+import { useViewMode } from "../hooks/useViewMode";
 import AppHeader from "../components/AppHeader";
 import type { Contest, Group } from "../api/types";
 
 export default function Dashboard() {
-  const user = useAuthStore((s) => s.user);
-  const isTeacher = user?.role === "teacher";
+  const { isTeacher, isStudentView } = useViewMode();
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [contests, setContests] = useState<Contest[]>([]);
+  const shownContests = isStudentView ? contests.filter((contest) => contest.is_visible) : contests;
 
   useEffect(() => {
     groupsApi.list().then(setGroups);
@@ -86,18 +86,18 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          {contests.length === 0 ? (
+          {shownContests.length === 0 ? (
             <p className="text-sm text-gray-400">Нет контестов</p>
           ) : (
             <div className="border rounded divide-y">
-              {contests.map((c) => (
+              {shownContests.map((c) => (
                 <Link
                   key={c.id}
                   to={`/contests/${c.id}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
                 >
                   <span className="text-sm font-medium">{c.title}</span>
-                  <span className="text-xs text-gray-400">{c.status}</span>
+                  <span className="text-xs text-gray-400">{c.status}{!c.is_visible && " · скрыт"}</span>
                 </Link>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
 

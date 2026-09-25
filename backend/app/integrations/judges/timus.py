@@ -84,7 +84,8 @@ def parse_author_id(value: str) -> str:
     value = value.strip()
     if not re.fullmatch(r"[0-9]+", value) or int(value) == 0:
         raise ValueError(
-            "Timus: нужен числовой id из ссылки author.aspx?id=…, не JUDGE_ID"
+            "Timus: введите только цифры из JUDGE_ID, убрав буквы в конце "
+            "(например, 12345AB → 12345). Это id из ссылки author.aspx?id=…"
         )
     return str(int(value))
 

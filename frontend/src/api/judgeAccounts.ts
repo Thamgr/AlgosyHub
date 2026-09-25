@@ -21,12 +21,16 @@ export const JUDGE_SOURCES: {
   label: string;
   placeholder: string;
   helpUrl?: string;
+  helpLabel?: string;
+  helpText?: string;
 }[] = [
   {
     source: "timus",
     label: "Timus",
-    placeholder: "ID автора из author.aspx?id=12345",
+    placeholder: "12345 (JUDGE_ID без букв)",
     helpUrl: "https://acm.timus.ru/ranklist.aspx",
+    helpLabel: "Найти ID автора",
+    helpText: "Введите только цифры из JUDGE_ID, убрав буквы в конце. Например, 12345AB → 12345. Это же число указано в ссылке на профиль: author.aspx?id=12345. Полный JUDGE_ID вводить не нужно.",
   },
   {
     source: "codeforces",

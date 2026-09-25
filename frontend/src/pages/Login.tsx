@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import api from "../api/client";
 import { useAuthStore } from "../store/auth";
+import { usePlatformSettings } from "../store/platformSettings";
 import type { TokenResponse, User } from "../api/types";
 
 export default function Login() {
+  const registrationEnabled = usePlatformSettings((s) => s.settings?.registration_enabled === true);
   const navigate = useNavigate();
   const { setToken, setUser } = useAuthStore();
   const [username, setUsername] = useState("");
@@ -68,12 +71,12 @@ export default function Login() {
             {loading ? "Вход..." : "Войти"}
           </button>
         </form>
-        <p className="mt-4 text-sm text-center text-gray-500">
+        {registrationEnabled && <p className="mt-4 text-sm text-center text-gray-500">
           Нет аккаунта?{" "}
           <Link to="/register" className="text-blue-600 hover:underline">
             Зарегистрироваться
           </Link>
-        </p>
+        </p>}
       </div>
     </div>
   );

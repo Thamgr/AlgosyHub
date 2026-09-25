@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import api from "../api/client";
 import { getApiError } from "../api/errors";
 import { useAuthStore } from "../store/auth";
+import { usePlatformSettings } from "../store/platformSettings";
 import type { TokenResponse, User, UserRole } from "../api/types";
 
 export default function Register() {
+  const { settings, error: settingsError, refresh } = usePlatformSettings();
   const navigate = useNavigate();
   const { setToken, setUser } = useAuthStore();
   const [form, setForm] = useState({
@@ -45,7 +48,14 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm p-8 bg-white rounded-lg shadow">
         <h1 className="text-2xl font-bold mb-6">Регистрация</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {!settings ? (
+          <div className="text-sm text-gray-500">
+            {settingsError || "Загрузка..."}
+            {settingsError && <button onClick={() => void refresh()} className="block mt-2 text-blue-600 hover:underline">Повторить</button>}
+          </div>
+        ) : !settings.registration_enabled ? (
+          <p className="text-sm text-gray-600">Регистрация отключена администратором. Если у вас уже есть аккаунт, вы можете войти.</p>
+        ) : <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Логин</label>
             <input
@@ -92,7 +102,7 @@ export default function Register() {
           >
             {loading ? "Регистрация..." : "Зарегистрироваться"}
           </button>
-        </form>
+        </form>}
         <p className="mt-4 text-sm text-center text-gray-500">
           Уже есть аккаунт?{" "}
           <Link to="/login" className="text-blue-600 hover:underline">

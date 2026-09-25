@@ -8,7 +8,7 @@ UI судьи (`/contest/.../submit`), а здесь мы только набл�
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionFactory
@@ -137,7 +137,7 @@ async def _collect_polling_targets(
             (JudgeAccount.user_id == group_members.c.user_id)
             & (JudgeAccount.source == Problem.external_source),
         )
-        .where(Contest.status != ContestStatus.draft)
+        .where(or_(Contest.status != ContestStatus.draft, Contest.starts_at <= datetime.now(timezone.utc)))
     )
 
     has_any_group = (
@@ -161,7 +161,7 @@ async def _collect_polling_targets(
         .join(contest_problems, contest_problems.c.contest_id == Contest.id)
         .join(Problem, Problem.id == contest_problems.c.problem_id)
         .join(JudgeAccount, JudgeAccount.source == Problem.external_source)
-        .where(Contest.status != ContestStatus.draft)
+        .where(or_(Contest.status != ContestStatus.draft, Contest.starts_at <= datetime.now(timezone.utc)))
         .where(~has_any_group)
     )
 
@@ -188,16 +188,16 @@ async def _collect_polling_targets(
     contest_order: dict[int, tuple[int, datetime]] = {}
     contests_rows = (
         await session.execute(
-            select(Contest.id, Contest.status, Contest.starts_at).where(
+            select(Contest).where(
                 Contest.id.in_({r.contest_id for r in rows})
             )
         )
-    ).all()
+    ).scalars().all()
     EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    for cid, status, starts_at in contests_rows:
+    for contest in contests_rows:
         # running = 1 (приоритетнее), finished = 0
-        priority = 1 if status == ContestStatus.running else 0
-        contest_order[cid] = (priority, starts_at or EPOCH)
+        priority = 1 if contest.effective_status() == ContestStatus.running else 0
+        contest_order[contest.id] = (priority, contest.starts_at or EPOCH)
 
     for r in rows:
         key = (r.user_id, r.external_source)

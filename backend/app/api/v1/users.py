@@ -19,6 +19,7 @@ async def get_user_profile(username: str, session: SessionDep):
     return UserProfileResponse(
         id=user.id,
         username=user.username,
+        full_name=user.full_name,
         role=user.role,
         stats=UserStats(**stats),
     )

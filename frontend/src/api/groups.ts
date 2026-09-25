@@ -1,5 +1,5 @@
 import api from "./client";
-import type { Contest, Group, User } from "./types";
+import type { Contest, Group, GroupScoreboard, User } from "./types";
 
 export const groupsApi = {
   create: (data: { name: string; description?: string }) =>
@@ -14,6 +14,9 @@ export const groupsApi = {
 
   getContests: (id: number) =>
     api.get<Contest[]>(`/api/v1/groups/${id}/contests`).then((r) => r.data),
+
+  scoreboard: (id: number) =>
+    api.get<GroupScoreboard>(`/api/v1/groups/${id}/scoreboard`).then((r) => r.data),
 
   addMember: (id: number, username: string) =>
     api.post(`/api/v1/groups/${id}/members`, { username }),

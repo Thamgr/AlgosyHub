@@ -1,26 +1,26 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import Link from "../components/ViewLink";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
-import { useAuthStore } from "../store/auth";
-import type { Contest, Group, User } from "../api/types";
+import { useViewMode } from "../hooks/useViewMode";
+import type { Group, User } from "../api/types";
+import GroupScoreboard from "../components/GroupScoreboard";
 
 export default function GroupDetail() {
   const { id } = useParams<{ id: string }>();
   const groupId = Number(id);
-  const user = useAuthStore((s) => s.user);
-  const isTeacher = user?.role === "teacher";
+  const { isTeacher } = useViewMode();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<User[]>([]);
-  const [contests, setContests] = useState<Contest[]>([]);
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
+  const [scoreboardRevision, setScoreboardRevision] = useState(0);
 
   useEffect(() => {
     groupsApi.get(groupId).then(setGroup);
     groupsApi.getMembers(groupId).then(setMembers);
-    groupsApi.getContests(groupId).then(setContests);
   }, [groupId]);
 
   async function handleAddMember(e: React.FormEvent) {
@@ -31,6 +31,7 @@ export default function GroupDetail() {
       await groupsApi.addMember(groupId, username.trim());
       const updated = await groupsApi.getMembers(groupId);
       setMembers(updated);
+      setScoreboardRevision((value) => value + 1);
       setUsername("");
     } catch (err: unknown) {
       setError(getApiError(err));
@@ -40,41 +41,22 @@ export default function GroupDetail() {
   async function handleRemoveMember(userId: number) {
     await groupsApi.removeMember(groupId, userId);
     setMembers((prev) => prev.filter((m) => m.id !== userId));
+    setScoreboardRevision((value) => value + 1);
   }
 
   if (!group) return <div className="p-6 text-sm text-gray-400">Загрузка...</div>;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8">
+    <div className="p-6 max-w-7xl mx-auto space-y-8">
       <div>
         <Link to="/" className="text-sm text-gray-400 hover:underline">← Назад</Link>
         <h1 className="text-xl font-semibold mt-1">{group.name}</h1>
-        {group.description && <p className="text-sm text-gray-500 mt-1">{group.description}</p>}
       </div>
 
-      {/* Контесты */}
-      <section>
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Контесты</h2>
-        {contests.length === 0 ? (
-          <p className="text-sm text-gray-400">Контестов нет</p>
-        ) : (
-          <div className="border rounded divide-y">
-            {contests.map((c) => (
-              <Link
-                key={c.id}
-                to={`/contests/${c.id}`}
-                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
-              >
-                <span className="text-sm font-medium">{c.title}</span>
-                <span className="text-xs text-gray-400">{c.status}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      <GroupScoreboard key={groupId} groupId={groupId} revision={scoreboardRevision} />
 
       {/* Участники */}
-      <section>
+      <section className="max-w-3xl">
         <h2 className="text-sm font-medium text-gray-700 mb-2">
           Участники ({members.length})
         </h2>

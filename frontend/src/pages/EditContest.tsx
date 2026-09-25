@@ -1,5 +1,10 @@
+import { usePlatformSettings } from "../store/platformSettings";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
+import ContestStartField from "../components/ContestStartField";
+import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
 import { toLocalDateTime } from "../lib/dateTime";
 import { contestsApi } from "../api/contests";
@@ -15,6 +20,7 @@ import type { Contest, ExternalSource, Group, Problem } from "../api/types";
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function EditContest() {
+  const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
   const { id } = useParams<{ id: string }>();
   const contestId = Number(id);
   const navigate = useNavigate();
@@ -24,6 +30,8 @@ export default function EditContest() {
   const [groups, setGroups] = useState<Group[]>([]);
 
   const [title, setTitle] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [isVisible, setIsVisible] = useState(true);
   const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -43,7 +51,6 @@ export default function EditContest() {
 
   useEffect(() => {
     if (Number.isNaN(contestId)) {
-      setNotFound(true);
       return;
     }
     contestsApi
@@ -51,6 +58,8 @@ export default function EditContest() {
       .then((c) => {
         setContest(c);
         setTitle(c.title);
+        setStartsAt(toLocalDateTime(c.starts_at));
+        setIsVisible(c.is_visible);
         setEndsAt(toLocalDateTime(c.ends_at));
         setShowAiHints(c.show_ai_hints);
         setSelectedGroups(new Set(c.group_ids));
@@ -76,7 +85,9 @@ export default function EditContest() {
     [contest, showAiHints],
   );
   const deadlineDirty = contest != null && toLocalDateTime(endsAt) !== toLocalDateTime(contest.ends_at);
-  const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty;
+  const startDirty = contest != null && toLocalDateTime(startsAt) !== toLocalDateTime(contest.starts_at);
+  const visibilityDirty = contest != null && isVisible !== contest.is_visible;
+  const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty;
   const isDraft = contest?.status === "draft";
 
   function toggleGroup(gid: number) {
@@ -143,9 +154,11 @@ export default function EditContest() {
     setSaving(true);
     try {
       let updated = contest;
-      const metaDirty = titleDirty || hintsDirty || deadlineDirty;
+      const metaDirty = titleDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty;
       if (metaDirty) {
         updated = await contestsApi.update(contestId, {
+          ...(startDirty ? { starts_at: startsAt ? new Date(startsAt).toISOString() : null } : {}),
+          ...(visibilityDirty ? { is_visible: isVisible } : {}),
           ...(titleDirty ? { title: title.trim() } : {}),
           ...(deadlineDirty ? { ends_at: new Date(endsAt).toISOString() } : {}),
           ...(hintsDirty ? { show_ai_hints: showAiHints } : {}),
@@ -158,6 +171,8 @@ export default function EditContest() {
         );
       }
       setContest(updated);
+      setStartsAt(toLocalDateTime(updated.starts_at));
+      setIsVisible(updated.is_visible);
       setEndsAt(toLocalDateTime(updated.ends_at));
       setSavedAt(Date.now());
     } catch (err: unknown) {
@@ -167,7 +182,7 @@ export default function EditContest() {
     }
   }
 
-  if (notFound) {
+  if (notFound || Number.isNaN(contestId)) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <Link to="/" className="text-sm text-gray-400 hover:underline">
@@ -250,8 +265,11 @@ export default function EditContest() {
             )}
           </div>
 
+          <ContestStartField value={startsAt} onChange={setStartsAt} />
           <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
+          <ContestVisibilityField checked={isVisible} onChange={setIsVisible} />
 
+          {aiHintsEnabled && (
           <div>
             <label className="flex items-start gap-2 cursor-pointer">
               <input
@@ -269,6 +287,7 @@ export default function EditContest() {
               </span>
             </label>
           </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-2">Задачи</label>

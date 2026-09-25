@@ -13,7 +13,7 @@ from app.schemas.problem import (
     ProblemHintsResponse,
     ProblemResponse,
 )
-from app.services import ai_hint_service, contest_service, problem_service
+from app.services import ai_hint_service, contest_service, problem_service, platform_settings_service
 
 router = APIRouter(prefix="/problems", tags=["problems"])
 
@@ -67,6 +67,7 @@ async def get_hints(
     user_id: CurrentUserID,
     contest_id: int | None = Query(default=None),
 ):
+    await platform_settings_service.require_ai_hints(session)
     if contest_id is not None:
         try:
             await contest_service.assert_ai_hints_allowed(
@@ -102,6 +103,7 @@ async def regenerate_hints(
     teacher_id: TeacherDep,
     contest_id: int | None = Query(default=None),
 ):
+    await platform_settings_service.require_ai_hints(session)
     if contest_id is not None:
         try:
             await contest_service.assert_ai_hints_allowed(

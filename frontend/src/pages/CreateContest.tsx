@@ -1,5 +1,9 @@
+import { usePlatformSettings } from "../store/platformSettings";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "../components/ViewLink";
+import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
+import ContestStartField from "../components/ContestStartField";
+import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
@@ -16,8 +20,11 @@ interface ProblemRow {
 }
 
 export default function CreateContest() {
+  const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [isVisible, setIsVisible] = useState(true);
   const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -65,6 +72,8 @@ export default function CreateContest() {
     try {
       const contest = await contestsApi.create({
         title: title.trim(),
+        starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+        is_visible: isVisible,
         ends_at: new Date(endsAt).toISOString(),
         group_ids: Array.from(selectedGroups),
         show_ai_hints: showAiHints,
@@ -113,7 +122,9 @@ export default function CreateContest() {
             />
           </div>
 
+          <ContestStartField value={startsAt} onChange={setStartsAt} />
           <ContestDeadlineField value={endsAt} onChange={setEndsAt} />
+          <ContestVisibilityField checked={isVisible} onChange={setIsVisible} />
 
           <div>
             <label className="block text-sm font-medium mb-1">
@@ -161,6 +172,7 @@ export default function CreateContest() {
             )}
           </div>
 
+          {aiHintsEnabled && (
           <div>
             <label className="flex items-start gap-2 cursor-pointer">
               <input
@@ -177,6 +189,7 @@ export default function CreateContest() {
               </span>
             </label>
           </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-1">
