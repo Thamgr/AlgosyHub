@@ -107,3 +107,56 @@ def test_migration_preserves_existing_names(monkeypatch):
             assert [(row.first_name, row.last_name) for row in rows] == names
     finally:
         engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_avatar_persists_in_profiles_and_partial_updates_do_not_reset_fields(client, session, users):
+    owner, other = users
+    headers = auth(owner)
+    options = (await client.get("/api/v1/me/avatar-options", headers=headers)).json()
+    assert len({option["emoji"] for option in options}) == len(options)
+    assert all(option["label"] for option in options)
+    assert {"👩‍💻", "☀️", "🚀"} <= {option["emoji"] for option in options}
+    for emoji in ("👩‍💻", "☀️", "🚀"):
+        response = await client.patch("/api/v1/me", headers=headers, json={"avatar_emoji": emoji})
+        assert response.status_code == 200
+        assert response.json()["avatar_emoji"] == emoji
+    response = await client.patch("/api/v1/me", headers=headers, json={"full_name": "Иванова Анна"})
+    assert response.json()["avatar_emoji"] == "🚀"
+    for path in ("/api/v1/auth/me", "/api/v1/users/profile_owner"):
+        data = (await client.get(path, headers=headers)).json()
+        assert (data["full_name"], data["avatar_emoji"], data["username"]) == ("Иванова Анна", "🚀", "profile_owner")
+    response = await client.patch("/api/v1/me", headers=headers, json={"avatar_emoji": ""})
+    assert response.json()["avatar_emoji"] == ""
+    assert response.json()["full_name"] == "Иванова Анна"
+    await session.refresh(owner)
+    await session.refresh(other)
+    assert owner.avatar_emoji == other.avatar_emoji == ""
+    assert other.full_name == ""
+
+
+@pytest.mark.asyncio
+async def test_avatar_rejects_non_choices_and_requires_authentication(client, users):
+    owner, _ = users
+    for value in (None, 123, [], "hello", "🚀🚀", "<img src=x>", "a" * 33):
+        response = await client.patch("/api/v1/me", headers=auth(owner), json={"avatar_emoji": value})
+        assert response.status_code == 422
+    assert (await client.patch("/api/v1/me", json={"avatar_emoji": "🚀"})).status_code == 401
+    assert (await client.get("/api/v1/me/avatar-options")).status_code == 401
+
+
+def test_avatar_migration_keeps_existing_accounts(monkeypatch):
+    path = Path(__file__).parents[1] / "alembic/versions/0010_user_avatar.py"
+    spec = importlib.util.spec_from_file_location("user_avatar_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(50), full_name VARCHAR(201))")
+            connection.exec_driver_sql("INSERT INTO users VALUES (1, 'alice', 'Иванова Анна')")
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+            migration.upgrade()
+            assert connection.exec_driver_sql("SELECT * FROM users").one() == (1, "alice", "Иванова Анна", "")
+    finally:
+        engine.dispose()

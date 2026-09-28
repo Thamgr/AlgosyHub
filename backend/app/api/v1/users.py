@@ -20,6 +20,7 @@ async def get_user_profile(username: str, session: SessionDep):
         id=user.id,
         username=user.username,
         full_name=user.full_name,
+        avatar_emoji=user.avatar_emoji,
         role=user.role,
         stats=UserStats(**stats),
     )

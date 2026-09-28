@@ -21,11 +21,47 @@ async def get_group(session: AsyncSession, group_id: int) -> Group:
     return group
 
 
+async def get_owned_group(session: AsyncSession, group_id: int, teacher_id: int) -> Group:
+    group = await get_group(session, group_id)
+    if group.teacher_id != teacher_id:
+        raise AppError("Forbidden", 403)
+    return group
+
+
+async def rename_group(
+    session: AsyncSession, group_id: int, teacher_id: int, name: str
+) -> Group:
+    group = await get_owned_group(session, group_id, teacher_id)
+    group.name = name
+    await session.flush()
+    await session.refresh(group)
+    return group
+
+
 async def list_groups(session: AsyncSession, user_id: int, role: str) -> list[Group]:
+    return await GroupRepository(session).get_accessible(user_id)
+
+
+async def add_observer_by_username(
+    session: AsyncSession, group_id: int, teacher_id: int, username: str,
+) -> None:
+    group = await get_owned_group(session, group_id, teacher_id)
     repo = GroupRepository(session)
-    if role == "teacher":
-        return await repo.get_by_teacher(user_id)
-    return await repo.get_for_user(user_id)
+    user = await session.scalar(select(User).where(User.username == username.strip()))
+    if not user:
+        raise AppError("Пользователь не найден", 404)
+    if user.id == group.teacher_id:
+        raise AppError("Владелец уже имеет доступ к группе", 409)
+    if await repo.is_member(group_id, user.id):
+        raise AppError("Сначала удалите пользователя из участников группы", 409)
+    if await repo.is_observer(group_id, user.id):
+        raise AppError("Пользователь уже наблюдатель", 409)
+    await repo.add_observer(group_id, user.id)
+
+
+async def remove_observer(session: AsyncSession, group_id: int, teacher_id: int, user_id: int) -> None:
+    await get_owned_group(session, group_id, teacher_id)
+    await GroupRepository(session).remove_observer(group_id, user_id)
 
 
 async def add_member_by_username(
@@ -43,6 +79,9 @@ async def add_member_by_username(
 
     if await repo.is_member(group_id, user.id):
         raise AppError("Already a member", 409)
+
+    if await repo.is_observer(group_id, user.id):
+        raise AppError("Сначала удалите пользователя из наблюдателей группы", 409)
 
     await repo.add_member(group_id, user.id)
 

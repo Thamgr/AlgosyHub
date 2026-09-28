@@ -21,7 +21,7 @@ export default function ContestStartField({
       <p className="text-xs text-gray-500 mt-1">
         Ваш часовой пояс: {Intl.DateTimeFormat().resolvedOptions().timeZone}.
         Контест запустится автоматически в указанное время. Посылки до начала не идут в зачёт.
-        Оставьте поле пустым для запуска кнопкой.
+        Пустое поле — без ограничения по времени начала.
       </p>
     </div>
   );

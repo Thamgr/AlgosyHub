@@ -10,6 +10,8 @@ import { toLocalDateTime } from "../lib/dateTime";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
+import { useAuthStore } from "../store/auth";
+import Navigate from "../components/ViewNavigate";
 import {
   JUDGE_PROBLEM_SOURCES,
   getJudgeLabel,
@@ -20,7 +22,9 @@ import type { Contest, ExternalSource, Group, Problem } from "../api/types";
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function EditContest() {
+  const userId = useAuthStore((s) => s.user?.id);
   const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
+  const showTags = usePlatformSettings((s) => s.settings?.show_problem_tags === true);
   const { id } = useParams<{ id: string }>();
   const contestId = Number(id);
   const navigate = useNavigate();
@@ -66,8 +70,8 @@ export default function EditContest() {
       })
       .catch(() => setNotFound(true));
     contestsApi.getProblems(contestId).then(setProblems).catch(() => {});
-    groupsApi.list().then(setGroups).catch(() => {});
-  }, [contestId]);
+    groupsApi.list().then((items) => setGroups(items.filter((group) => group.teacher_id === userId))).catch(() => {});
+  }, [contestId, userId]);
 
   const titleDirty = useMemo(
     () => contest != null && title.trim() !== contest.title,
@@ -88,7 +92,6 @@ export default function EditContest() {
   const startDirty = contest != null && toLocalDateTime(startsAt) !== toLocalDateTime(contest.starts_at);
   const visibilityDirty = contest != null && isVisible !== contest.is_visible;
   const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty;
-  const isDraft = contest?.status === "draft";
 
   function toggleGroup(gid: number) {
     setSelectedGroups((prev) => {
@@ -160,7 +163,7 @@ export default function EditContest() {
           ...(startDirty ? { starts_at: startsAt ? new Date(startsAt).toISOString() : null } : {}),
           ...(visibilityDirty ? { is_visible: isVisible } : {}),
           ...(titleDirty ? { title: title.trim() } : {}),
-          ...(deadlineDirty ? { ends_at: new Date(endsAt).toISOString() } : {}),
+          ...(deadlineDirty ? { ends_at: endsAt ? new Date(endsAt).toISOString() : null } : {}),
           ...(hintsDirty ? { show_ai_hints: showAiHints } : {}),
         });
       }
@@ -197,6 +200,8 @@ export default function EditContest() {
     return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
   }
 
+  if (contest.teacher_id !== userId) return <Navigate to={`/contests/${contestId}`} replace />;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="p-6 max-w-2xl mx-auto">
@@ -208,9 +213,6 @@ export default function EditContest() {
         </Link>
         <div className="flex items-center justify-between mt-1 mb-6">
           <h1 className="text-xl font-semibold">Редактирование контеста</h1>
-          <span className="text-xs text-gray-500 px-2 py-0.5 rounded bg-gray-100">
-            {contest.status}
-          </span>
         </div>
 
         <div className="space-y-6">
@@ -306,11 +308,10 @@ export default function EditContest() {
                           <div>{p.title}</div>
                           <div className="text-xs text-gray-400">
                             {getJudgeLabel(p.external_source)} · {p.external_id}
-                            {p.tags.length > 0 && <> · {p.tags.join(", ")}</>}
+                            {showTags && p.tags.length > 0 && <> · {p.tags.join(", ")}</>}
                           </div>
                         </td>
                         <td className="px-4 py-2 text-right w-12">
-                          {isDraft ? (
                             <button
                               type="button"
                               onClick={() => handleRemoveProblem(p.id)}
@@ -319,7 +320,6 @@ export default function EditContest() {
                             >
                               ×
                             </button>
-                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -328,7 +328,6 @@ export default function EditContest() {
               </div>
             )}
 
-            {isDraft ? (
               <form onSubmit={handleAddProblem} className="flex gap-2">
                 <select
                   value={newSource}
@@ -357,12 +356,6 @@ export default function EditContest() {
                   {addBusy ? "..." : "Добавить"}
                 </button>
               </form>
-            ) : (
-              <p className="text-xs text-gray-400">
-                Состав задач можно менять только пока контест в статусе{" "}
-                <span className="font-mono">draft</span>.
-              </p>
-            )}
             {addError && (
               <p className="text-red-500 text-sm mt-2">{addError}</p>
             )}
@@ -374,7 +367,7 @@ export default function EditContest() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !isDirty || !title.trim() || (deadlineDirty && !endsAt)}
+              disabled={saving || !isDirty || !title.trim()}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? "Сохранение..." : "Сохранить"}

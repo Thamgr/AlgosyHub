@@ -1,18 +1,25 @@
 from datetime import datetime
 
-from pydantic import AwareDatetime, BaseModel, Field, StrictBool, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    StrictBool,
+    model_validator,
+)
 
-from app.models.enums import ContestStatus, ExternalSource
+from app.models.enums import ExternalSource
 
 
 class ContestTiming(BaseModel):
+    model_config = {"extra": "forbid"}
     starts_at: AwareDatetime | None = None
-    ends_at: AwareDatetime
+    ends_at: AwareDatetime | None = None
     is_visible: StrictBool = True
 
     @model_validator(mode="after")
     def validate_window(self):
-        if self.starts_at is not None and self.ends_at <= self.starts_at:
+        if self.starts_at is not None and self.ends_at is not None and self.ends_at <= self.starts_at:
             raise ValueError("Время окончания должно быть позже времени начала")
         return self
 
@@ -31,7 +38,8 @@ class ContestResponse(BaseModel):
     group_id: int | None
     group_ids: list[int]
     title: str
-    status: ContestStatus
+    is_active: bool
+    teacher_id: int
     starts_at: datetime | None
     ends_at: datetime | None
     show_ai_hints: bool
@@ -48,19 +56,13 @@ class ContestUpdate(BaseModel):
     """Partial update of contest metadata. Only fields present in the request
     body are touched."""
 
+    model_config = {"extra": "forbid"}
+
     title: str | None = None
     show_ai_hints: bool | None = None
     ends_at: AwareDatetime | None = None
     starts_at: AwareDatetime | None = None
     is_visible: StrictBool = True
-
-    @field_validator("ends_at")
-    @classmethod
-    def deadline_cannot_be_removed(cls, value):
-        if value is None:
-            raise ValueError("Укажите дату и время окончания")
-        return value
-
 
 class AddProblemRequest(BaseModel):
     external_source: ExternalSource = ExternalSource.codeforces
@@ -77,6 +79,8 @@ class ScoreboardCellResponse(BaseModel):
 class ScoreboardRowResponse(BaseModel):
     user_id: int
     username: str
+    full_name: str = ""
+    avatar_emoji: str = ""
     solved: int
     attempts_total: int
     cells: list[ScoreboardCellResponse]

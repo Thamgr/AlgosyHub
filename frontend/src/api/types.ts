@@ -4,6 +4,7 @@ export interface User {
   id: number;
   username: string;
   full_name: string;
+  avatar_emoji: string;
   role: UserRole;
   is_platform_admin?: boolean;
 }
@@ -25,7 +26,6 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export type ContestStatus = "draft" | "running" | "finished";
 export type ExternalSource = "codeforces" | "informatics" | "leetcode" | "timus";
 export type SubmissionVerdict =
   | "pending"
@@ -55,12 +55,17 @@ export interface Group {
   description: string | null;
 }
 
+export interface GroupDetail extends Group {
+  author: Pick<User, "id" | "username" | "full_name" | "avatar_emoji">;
+}
+
 export interface Contest {
   id: number;
   group_id: number | null;
   group_ids: number[];
   title: string;
-  status: ContestStatus;
+  is_active: boolean;
+  teacher_id: number;
   starts_at: string | null;
   is_visible: boolean;
   ends_at: string | null;
@@ -96,6 +101,8 @@ export interface ScoreboardCell {
 export interface ScoreboardRow {
   user_id: number;
   username: string;
+  full_name: string;
+  avatar_emoji: string;
   solved: number;
   attempts_total: number;
   cells: ScoreboardCell[];
@@ -111,6 +118,8 @@ export interface GroupScoreboard {
   rows: {
     user_id: number;
     username: string;
+    full_name: string;
+    avatar_emoji: string;
     solved: number;
     attempts_total: number;
     cells: (ScoreboardCell & { contest_id: number })[];

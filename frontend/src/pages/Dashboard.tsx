@@ -4,10 +4,13 @@ import { contestsApi } from "../api/contests";
 import { groupsApi } from "../api/groups";
 import { useViewMode } from "../hooks/useViewMode";
 import AppHeader from "../components/AppHeader";
+import { useNow } from "../hooks/useNow";
+import { contestTiming } from "../lib/contestTimer";
 import type { Contest, Group } from "../api/types";
 
 export default function Dashboard() {
   const { isTeacher, isStudentView } = useViewMode();
+  const now = useNow();
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [contests, setContests] = useState<Contest[]>([]);
@@ -97,7 +100,7 @@ export default function Dashboard() {
                   className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
                 >
                   <span className="text-sm font-medium">{c.title}</span>
-                  <span className="text-xs text-gray-400">{c.status}{!c.is_visible && " · скрыт"}</span>
+                  <span className="text-xs text-gray-400">{contestTiming(c, now).isActive ? "Идёт" : "Неактивен"}{!c.is_visible && " · скрыт"}</span>
                 </Link>
               ))}
             </div>

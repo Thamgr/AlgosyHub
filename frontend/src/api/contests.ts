@@ -11,7 +11,7 @@ export interface CreateContestData {
   group_ids?: number[];
   starts_at?: string | null;
   is_visible?: boolean;
-  ends_at: string;
+  ends_at?: string | null;
   show_ai_hints?: boolean;
 }
 
@@ -24,14 +24,14 @@ export interface MatchContestData {
   count: number;
   starts_at?: string | null;
   is_visible?: boolean;
-  ends_at: string;
+  ends_at?: string | null;
   show_ai_hints?: boolean;
 }
 
 export interface UpdateContestData {
   starts_at?: string | null;
   is_visible?: boolean;
-  ends_at?: string;
+  ends_at?: string | null;
   title?: string;
   show_ai_hints?: boolean;
 }
@@ -78,11 +78,6 @@ export const contestsApi = {
     api
       .put<Contest>(`/api/v1/contests/${id}/groups`, { group_ids })
       .then((r) => r.data),
-
-  start: (id: number) =>
-    api.post<Contest>(`/api/v1/contests/${id}/start`).then((r) => r.data),
-  finish: (id: number) =>
-    api.post<Contest>(`/api/v1/contests/${id}/finish`).then((r) => r.data),
 
   scoreboard: (id: number) =>
     api.get<Scoreboard>(`/api/v1/contests/${id}/scoreboard`).then((r) => r.data),

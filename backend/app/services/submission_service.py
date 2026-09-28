@@ -8,7 +8,7 @@ UI судьи (`/contest/.../submit`), а здесь мы только набл�
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionFactory
@@ -16,11 +16,12 @@ from app.core.exceptions import AppError
 from app.integrations.judges import registry
 from app.integrations.judges.base import ExternalSubmission
 from app.models.contest import Contest, contest_groups, contest_problems
-from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict
+from app.models.enums import ExternalSource
 from app.models.group import group_members
 from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
 from app.models.submission import Submission
+from app.repositories.contest_repo import ContestRepository
 from app.repositories.submission_repo import SubmissionRepository
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ async def poll_external_submissions() -> None:
     Алгоритм:
       1. Берём все (user_id, source) у которых:
          - подключён JudgeAccount(source)
-         - есть доступ к хотя бы одному (active/finished) контесту с задачей на этом source
+         - есть доступ к хотя бы одному начавшемуся контесту с задачей на этом source
       2. Для каждого такого юзера фетчим его последние посылки на судье.
       3. Для каждой посылки, чья (source, external_problem_id) совпадает с
          задачей в одном из доступных юзеру контестов — вставляем или
@@ -89,7 +90,7 @@ async def poll_external_submissions() -> None:
 class _UserPollingInfo:
     """Что поллеру нужно знать про конкретного (user, source)."""
 
-    __slots__ = ("handle", "problem_by_external_id", "contest_id_by_problem_id")
+    __slots__ = ("contest_id_by_problem_id", "handle", "problem_by_external_id")
 
     def __init__(self, handle: str) -> None:
         self.handle = handle
@@ -110,8 +111,8 @@ async def _collect_polling_targets(
       A. user состоит в группе, которая прикреплена к контесту;
       B. контест публичный (без групп-тегов) — поллим всех, у кого есть
          подключённый JudgeAccount нужного судьи.
-    В обоих случаях контест должен быть не в draft и содержать задачу того
-    же source, что и JudgeAccount пользователя.
+    В обоих случаях время начала уже наступило (либо не ограничено).
+    Окончание не останавливает синхронизацию: поздние вердикты и история сохраняются.
     """
     # A. контесты с группами — через членство в группе.
     grouped_stmt = (
@@ -119,7 +120,6 @@ async def _collect_polling_targets(
             group_members.c.user_id,
             JudgeAccount.handle,
             Contest.id.label("contest_id"),
-            Contest.status,
             Problem.id.label("problem_id"),
             Problem.external_source,
             Problem.external_id,
@@ -137,7 +137,7 @@ async def _collect_polling_targets(
             (JudgeAccount.user_id == group_members.c.user_id)
             & (JudgeAccount.source == Problem.external_source),
         )
-        .where(or_(Contest.status != ContestStatus.draft, Contest.starts_at <= datetime.now(timezone.utc)))
+        .where(ContestRepository.started_filter())
     )
 
     has_any_group = (
@@ -152,7 +152,6 @@ async def _collect_polling_targets(
             JudgeAccount.user_id,
             JudgeAccount.handle,
             Contest.id.label("contest_id"),
-            Contest.status,
             Problem.id.label("problem_id"),
             Problem.external_source,
             Problem.external_id,
@@ -161,7 +160,7 @@ async def _collect_polling_targets(
         .join(contest_problems, contest_problems.c.contest_id == Contest.id)
         .join(Problem, Problem.id == contest_problems.c.problem_id)
         .join(JudgeAccount, JudgeAccount.source == Problem.external_source)
-        .where(or_(Contest.status != ContestStatus.draft, Contest.starts_at <= datetime.now(timezone.utc)))
+        .where(ContestRepository.started_filter())
         .where(~has_any_group)
     )
 
@@ -184,7 +183,7 @@ async def _collect_polling_targets(
     }
 
     # Для выбора "лучшего" контеста для задачи (если задача в нескольких) —
-    # предпочтём running, затем самый поздний по starts_at.
+    # предпочтём идущий сейчас, затем самый поздний по starts_at.
     contest_order: dict[int, tuple[int, datetime]] = {}
     contests_rows = (
         await session.execute(
@@ -195,8 +194,7 @@ async def _collect_polling_targets(
     ).scalars().all()
     EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
     for contest in contests_rows:
-        # running = 1 (приоритетнее), finished = 0
-        priority = 1 if contest.effective_status() == ContestStatus.running else 0
+        priority = int(contest.is_active())
         contest_order[contest.id] = (priority, contest.starts_at or EPOCH)
 
     for r in rows:

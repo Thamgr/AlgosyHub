@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.avatars import AVATAR_EMOJIS
 from app.models.enums import UserRole
 
 
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     full_name: str = ""
+    avatar_emoji: str = ""
     role: UserRole
     is_platform_admin: bool = False
 
@@ -40,6 +42,7 @@ class UserProfileResponse(BaseModel):
     id: int
     username: str
     full_name: str = ""
+    avatar_emoji: str = ""
     role: UserRole
     stats: UserStats
 
@@ -48,3 +51,16 @@ class UpdateProfileRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     full_name: str = Field(default="", max_length=201)
+    avatar_emoji: str = Field(default="", max_length=32)
+
+    @field_validator("avatar_emoji")
+    @classmethod
+    def validate_avatar(cls, value: str) -> str:
+        if value and value not in AVATAR_EMOJIS:
+            raise ValueError("Выберите эмодзи из списка")
+        return value
+
+
+class AvatarOption(BaseModel):
+    emoji: str
+    label: str

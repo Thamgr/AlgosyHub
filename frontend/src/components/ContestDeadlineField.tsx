@@ -14,14 +14,13 @@ export default function ContestDeadlineField({
         id="contest-deadline"
         type="datetime-local"
         step="1"
-        required
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <p className="text-xs text-gray-500 mt-1">
         Ваш часовой пояс: {Intl.DateTimeFormat().resolvedOptions().timeZone}.
-        Учитываются посылки, отправленные до этого времени. Срок можно изменить позже.
+        Учитываются посылки, отправленные до этого времени. Пустое поле — без срока окончания.
       </p>
     </div>
   );

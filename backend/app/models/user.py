@@ -13,6 +13,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(201), default="", server_default="")
+    avatar_emoji: Mapped[str] = mapped_column(String(32), default="", server_default="")
     # Retained for compatibility with the previous database revision.
     first_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
     last_name: Mapped[str] = mapped_column(String(100), default="", server_default="")

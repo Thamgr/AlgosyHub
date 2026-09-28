@@ -1,108 +1,64 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import Link from "../components/ViewLink";
-import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
 import { useViewMode } from "../hooks/useViewMode";
-import type { Group, User } from "../api/types";
+import { useAuthStore } from "../store/auth";
+import type { GroupDetail as GroupData } from "../api/types";
 import GroupScoreboard from "../components/GroupScoreboard";
+import GroupMaterials from "../components/GroupMaterials";
+import UserIdentity from "../components/UserIdentity";
 
 export default function GroupDetail() {
   const { id } = useParams<{ id: string }>();
-  const groupId = Number(id);
-  const { isTeacher } = useViewMode();
+  return <GroupDetailContent key={id} groupId={Number(id)} />;
+}
 
-  const [group, setGroup] = useState<Group | null>(null);
-  const [members, setMembers] = useState<User[]>([]);
-  const [username, setUsername] = useState("");
+function GroupDetailContent({ groupId }: { groupId: number }) {
+  const { isTeacher } = useViewMode();
+  const userId = useAuthStore((s) => s.user?.id);
+  const [group, setGroup] = useState<GroupData | null>(null);
   const [error, setError] = useState("");
-  const [scoreboardRevision, setScoreboardRevision] = useState(0);
 
   useEffect(() => {
-    groupsApi.get(groupId).then(setGroup);
-    groupsApi.getMembers(groupId).then(setMembers);
+    let active = true;
+    groupsApi.get(groupId).then((data) => {
+      if (active) setGroup(data);
+    }).catch(() => {
+      if (active) setError("Не удалось загрузить группу.");
+    });
+    return () => { active = false; };
   }, [groupId]);
 
-  async function handleAddMember(e: React.FormEvent) {
-    e.preventDefault();
-    if (!username.trim()) return;
-    setError("");
-    try {
-      await groupsApi.addMember(groupId, username.trim());
-      const updated = await groupsApi.getMembers(groupId);
-      setMembers(updated);
-      setScoreboardRevision((value) => value + 1);
-      setUsername("");
-    } catch (err: unknown) {
-      setError(getApiError(err));
-    }
-  }
-
-  async function handleRemoveMember(userId: number) {
-    await groupsApi.removeMember(groupId, userId);
-    setMembers((prev) => prev.filter((m) => m.id !== userId));
-    setScoreboardRevision((value) => value + 1);
-  }
-
+  if (error) return <div role="alert" className="p-6 text-sm text-red-500">{error}</div>;
   if (!group) return <div className="p-6 text-sm text-gray-400">Загрузка...</div>;
 
+  const canManage = isTeacher && userId === group.teacher_id;
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">
       <div>
         <Link to="/" className="text-sm text-gray-400 hover:underline">← Назад</Link>
-        <h1 className="text-xl font-semibold mt-1">{group.name}</h1>
-      </div>
-
-      <GroupScoreboard key={groupId} groupId={groupId} revision={scoreboardRevision} />
-
-      {/* Участники */}
-      <section className="max-w-3xl">
-        <h2 className="text-sm font-medium text-gray-700 mb-2">
-          Участники ({members.length})
-        </h2>
-        <div className="border rounded divide-y mb-3">
-          {members.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-gray-400">Нет участников</p>
-          ) : (
-            members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-4 py-2">
-                <Link
-                  to={`/u/${m.username}`}
-                  className="text-sm hover:underline"
-                >
-                  {m.username}
-                </Link>
-                {isTeacher && (
-                  <button
-                    onClick={() => handleRemoveMember(m.id)}
-                    className="text-xs text-red-400 hover:text-red-600"
-                  >
-                    Удалить
-                  </button>
-                )}
-              </div>
-            ))
+        <div className="flex items-center justify-between gap-4 mt-1">
+          <h1 className="min-w-0 break-words text-xl font-semibold">{group.name}</h1>
+          {canManage && (
+            <Link to={`/groups/${groupId}/settings`} aria-label="Настройки группы" title="Настройки группы"
+              className="shrink-0 rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round" aria-hidden="true" className="h-5 w-5">
+                <path d="M9.5 3h5l.6 2.4 1.4.8 2.4-.7 2.5 4.3-1.8 1.7v1.6l1.8 1.7-2.5 4.3-2.4-.7-1.4.8-.6 2.4h-5l-.6-2.4-1.4-.8-2.4.7-2.5-4.3 1.8-1.7v-1.6L2.1 9.8l2.5-4.3 2.4.7 1.4-.8L9.5 3Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </Link>
           )}
         </div>
-
-        {isTeacher && (
-          <form onSubmit={handleAddMember} className="flex gap-2">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username ученика"
-              className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-            >
-              Добавить
-            </button>
-          </form>
-        )}
-        {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-      </section>
+        <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+          <span>by</span>
+          <Link to={`/u/${encodeURIComponent(group.author.username)}`} className="min-w-0 text-gray-700 hover:underline">
+            <UserIdentity user={group.author} />
+          </Link>
+        </div>
+      </div>
+      <GroupMaterials groupId={groupId} canManage={canManage} />
+      <GroupScoreboard groupId={groupId} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import auth as auth_router
 from app.api.v1 import contests as contests_router
 from app.api.v1 import groups as groups_router
+from app.api.v1 import group_materials as group_materials_router
 from app.api.v1 import me as me_router
 from app.api.v1 import problems as problems_router
 from app.api.v1 import submissions as submissions_router
@@ -62,6 +63,7 @@ register_exception_handlers(app)
 
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(groups_router.router, prefix="/api/v1")
+app.include_router(group_materials_router.router, prefix="/api/v1")
 app.include_router(problems_router.router, prefix="/api/v1")
 app.include_router(contests_router.router, prefix="/api/v1")
 app.include_router(submissions_router.router, prefix="/api/v1")

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "../components/ViewLink";
 import { groupsApi } from "../api/groups";
 import type { GroupScoreboard as ScoreboardData } from "../api/types";
+import UserIdentity from "./UserIdentity";
+import { displayName } from "../lib/userDisplay";
 
 function problemLetter(index: number): string {
   let letter = "";
@@ -11,11 +13,9 @@ function problemLetter(index: number): string {
   return letter;
 }
 
-export default function GroupScoreboard({ groupId, revision }: { groupId: number; revision: number }) {
+export default function GroupScoreboard({ groupId }: { groupId: number }) {
   const [data, setData] = useState<ScoreboardData | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const request = useRef(0);
   const refresh = useCallback(() => {
     const current = ++request.current;
@@ -23,13 +23,10 @@ export default function GroupScoreboard({ groupId, revision }: { groupId: number
       if (current !== request.current) return;
       setData(result);
       setError("");
-      setUpdatedAt(new Date());
     }).catch(() => {
       if (current !== request.current) return;
       setData(null);
       setError("Не удалось загрузить результаты. Таблица доступна участникам группы и её преподавателю.");
-    }).finally(() => {
-      if (current === request.current) setBusy(false);
     });
   }, [groupId]);
 
@@ -37,20 +34,11 @@ export default function GroupScoreboard({ groupId, revision }: { groupId: number
     void refresh();
     const timer = setInterval(() => { void refresh(); }, 30000);
     return () => { clearInterval(timer); request.current += 1; };
-  }, [refresh, revision]);
+  }, [refresh]);
 
   return (
     <section aria-labelledby="group-scoreboard-title" className="min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 id="group-scoreboard-title" className="text-sm font-medium text-gray-700">Сводная таблица</h2>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          {updatedAt && <span>Обновлено в {updatedAt.toLocaleTimeString()}</span>}
-          <button type="button" onClick={() => { setBusy(true); void refresh(); }} disabled={busy}
-            className="text-blue-600 hover:underline disabled:text-gray-400">
-            {busy ? "Обновление…" : "Обновить"}
-          </button>
-        </div>
-      </div>
+      <h2 id="group-scoreboard-title" className="text-sm font-medium text-gray-700 mb-2">Сводная таблица</h2>
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p>
         : data ? <GroupScoreboardTable data={data} />
           : <p className="text-sm text-gray-400">Загрузка результатов…</p>}
@@ -61,18 +49,17 @@ export default function GroupScoreboard({ groupId, revision }: { groupId: number
 export function GroupScoreboardTable({ data }: { data: ScoreboardData }) {
   const contests = data.contests.filter((contest) => contest.problems.length > 0);
   const columns = contests.flatMap((contest) => contest.problems.map((problem) => ({ contest, problem })));
-  if (columns.length === 0) {
-    return <p className="text-sm text-gray-400">В видимых контестах пока нет задач.</p>;
-  }
+  const hasProblems = columns.length > 0;
+  const rows = [...data.rows].sort((a, b) => b.solved - a.solved);
   return (
-    <div role="region" aria-label="Результаты участников по задачам" tabIndex={0}
+    <div role="region" aria-label="Сводная таблица группы" tabIndex={0}
       className="overflow-auto max-h-[70vh] border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
       <table className="text-sm border-separate border-spacing-0 w-max min-w-full">
-        <caption className="sr-only">Результаты участников группы по задачам видимых контестов</caption>
+        <caption className="sr-only">{hasProblems ? "Результаты участников группы по задачам видимых контестов" : "Участники группы"}</caption>
         <thead>
           <tr className="text-xs text-gray-600">
-            <th scope="col" rowSpan={2} className="sticky top-0 left-0 z-30 min-w-[180px] w-[180px] max-w-[180px] bg-gray-50 border-b border-r px-3 py-2 text-left">Участник</th>
-            <th scope="col" rowSpan={2} className="sticky top-0 left-[180px] z-30 min-w-[72px] w-[72px] bg-gray-50 border-b border-r px-2 py-2 text-center">Решено</th>
+            <th scope="col" rowSpan={hasProblems ? 2 : 1} className="sticky top-0 left-0 z-30 min-w-[240px] w-[240px] max-w-[240px] bg-gray-50 border-b border-r px-3 py-2 text-left">Участник</th>
+            {hasProblems && <th scope="col" rowSpan={2} className="sticky top-0 left-[240px] z-30 min-w-[72px] w-[72px] bg-gray-50 border-b border-r px-2 py-2 text-center">Решено</th>}
             {contests.map((contest) => (
               <th scope="colgroup" colSpan={contest.problems.length} key={contest.id}
                 className="sticky top-0 z-20 h-11 bg-blue-50 border-b border-r px-3 py-2 font-medium text-left">
@@ -82,7 +69,7 @@ export function GroupScoreboardTable({ data }: { data: ScoreboardData }) {
               </th>
             ))}
           </tr>
-          <tr className="text-xs text-gray-500">
+          {hasProblems && <tr className="text-xs text-gray-500">
             {contests.flatMap((contest) => contest.problems.map((problem, index) => (
               <th scope="col" key={`${contest.id}:${problem.id}`}
                 className="sticky top-11 z-20 bg-gray-50 border-b border-r min-w-16 px-2 py-2 font-normal">
@@ -95,20 +82,20 @@ export function GroupScoreboardTable({ data }: { data: ScoreboardData }) {
                 </Link>
               </th>
             )))}
-          </tr>
+          </tr>}
         </thead>
         <tbody>
-          {data.rows.length === 0 && <tr><td colSpan={columns.length + 2} className="p-4 text-gray-400">В группе пока нет участников.</td></tr>}
-          {data.rows.map((row) => {
+          {data.rows.length === 0 && <tr><td colSpan={columns.length + (hasProblems ? 2 : 1)} className="p-4 text-gray-400">В группе пока нет участников.</td></tr>}
+          {rows.map((row) => {
             const cells = new Map(row.cells.map((cell) => [`${cell.contest_id}:${cell.problem_id}`, cell]));
             return (
               <tr key={row.user_id} className="group">
-                <th scope="row" className="sticky left-0 z-10 w-[180px] min-w-[180px] max-w-[180px] bg-white group-hover:bg-gray-50 border-b border-r px-3 py-2 font-medium text-left">
-                  <Link to={`/u/${row.username}`} title={row.username} className="block truncate hover:underline">{row.username}</Link>
+                <th scope="row" className="sticky left-0 z-10 w-[240px] min-w-[240px] max-w-[240px] bg-white group-hover:bg-gray-50 border-b border-r px-3 py-2 font-medium text-left">
+                  <Link to={`/u/${row.username}`} title={`${displayName(row)} (@${row.username})`} className="block truncate hover:underline"><UserIdentity user={row} /></Link>
                 </th>
-                <td className="sticky left-[180px] z-10 bg-white group-hover:bg-gray-50 border-b border-r px-2 py-2 text-center font-mono text-xs">
-                  <span className="text-green-700">{row.solved}</span><span className="text-gray-400">/{columns.length}</span>
-                </td>
+                {hasProblems && <td className="sticky left-[240px] z-10 bg-white group-hover:bg-gray-50 border-b border-r px-2 py-2 text-center font-mono text-xs">
+                  <span className="text-green-700">{row.solved}</span>
+                </td>}
                 {columns.map(({ contest, problem }) => {
                   const cell = cells.get(`${contest.id}:${problem.id}`);
                   const attempts = cell?.attempts ?? 0;
@@ -117,7 +104,7 @@ export function GroupScoreboardTable({ data }: { data: ScoreboardData }) {
                     ? `Решено. Попыток: ${attempts}.${cell.first_accepted_at ? ` Принято: ${new Date(cell.first_accepted_at).toLocaleString()}.` : ""}`
                     : attempts > 0 ? `Пока не решено. Попыток: ${attempts}.` : "Нет посылок.";
                   return <td key={`${contest.id}:${problem.id}`}
-                    title={`${row.username} · ${contest.title} · ${problem.title}: ${description}`}
+                    title={`${displayName(row)} · ${contest.title} · ${problem.title}: ${description}`}
                     aria-label={`${problem.title}: ${description}`}
                     className={`border-b border-r px-2 py-2 text-center font-mono text-xs ${cell?.accepted ? "bg-green-50 text-green-700" : attempts > 0 ? "bg-red-50 text-red-700" : "text-gray-300"}`}>
                     {label}

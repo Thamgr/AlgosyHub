@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+
 from app.core.security import create_access_token
 from app.models.enums import ExternalSource, SubmissionVerdict, UserRole
 from app.models.group import Group, group_members
@@ -14,6 +15,25 @@ from app.services import contest_service
 
 def auth(user):
     return {"Authorization": "Bearer " + create_access_token(user.id)}
+
+
+@pytest.mark.asyncio
+async def test_profile_identity_reaches_both_scoreboards_and_members(client, course):
+    owner, alice, _bob, _outsider, group, contests, *_ = course
+    group_url = f"/api/v1/groups/{group.id}/scoreboard"
+    contest_url = f"/api/v1/contests/{contests[0].id}/scoreboard"
+    before = [(await client.get(url, headers=auth(owner))).json() for url in (group_url, contest_url)]
+    response = await client.patch("/api/v1/me", headers=auth(alice), json={"full_name": "Иванова Анна", "avatar_emoji": "🦊"})
+    assert response.status_code == 200
+    for url, previous in zip((group_url, contest_url), before):
+        data = (await client.get(url, headers=auth(owner))).json()
+        row = next(row for row in data["rows"] if row["user_id"] == alice.id)
+        old = next(row for row in previous["rows"] if row["user_id"] == alice.id)
+        assert (row["username"], row["full_name"], row["avatar_emoji"]) == ("alice", "Иванова Анна", "🦊")
+        assert (row["cells"], row["solved"]) == (old["cells"], old["solved"])
+    members = (await client.get(f"/api/v1/groups/{group.id}/members", headers=auth(owner))).json()
+    alice_row = next(row for row in members if row["id"] == alice.id)
+    assert (alice_row["full_name"], alice_row["avatar_emoji"]) == ("Иванова Анна", "🦊")
 
 
 @pytest_asyncio.fixture

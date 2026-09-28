@@ -1,9 +1,12 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
 from app.integrations.judges import registry
+from app.models.contest import Contest, contest_problems
 from app.models.enums import ExternalSource
 from app.models.problem import Problem
+from app.repositories.contest_repo import ContestRepository
 from app.repositories.problem_repo import ProblemRepository
 
 
@@ -50,3 +53,26 @@ async def get_problem(session: AsyncSession, problem_id: int) -> Problem | None:
 
 async def list_problems(session: AsyncSession) -> list[Problem]:
     return await ProblemRepository(session).list()
+
+
+async def get_problem_for_user(
+    session: AsyncSession, problem_id: int, user_id: int, contest_id: int | None = None
+) -> Problem:
+    problem = await get_problem(session, problem_id)
+    if problem is None:
+        raise AppError("Problem not found", 404)
+    if contest_id is None:
+        allowed = await session.scalar(select(Problem.id).where(
+            Problem.id == problem_id, ProblemRepository.access_filter(user_id)
+        ))
+    else:
+        allowed = await session.scalar(select(contest_problems.c.problem_id).join(
+            Contest, Contest.id == contest_problems.c.contest_id
+        ).where(
+            contest_problems.c.contest_id == contest_id,
+            contest_problems.c.problem_id == problem_id,
+            ContestRepository.problems_access_filter(user_id),
+        ))
+    if allowed is None:
+        raise AppError("Задача недоступна. Дождитесь начала контеста", 403)
+    return problem

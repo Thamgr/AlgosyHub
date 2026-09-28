@@ -1,28 +1,38 @@
+import logging
 from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
 
 from app.core.deps import CurrentUserID, SessionDep, require_role
 from app.core.exceptions import AppError
 from app.integrations.judges import registry
+from app.models.contest import Contest, contest_problems
 from app.models.enums import UserRole
+from app.repositories.problem_repo import ProblemRepository
 from app.schemas.problem import (
     CFTagsResponse,
     ProblemHintsResponse,
     ProblemResponse,
 )
-from app.services import ai_hint_service, contest_service, problem_service, platform_settings_service
+from app.services import (
+    ai_hint_service,
+    contest_service,
+    platform_settings_service,
+    problem_service,
+)
 
 router = APIRouter(prefix="/problems", tags=["problems"])
+logger = logging.getLogger(__name__)
 
 TeacherDep = Annotated[int, Depends(require_role(UserRole.teacher))]
 
 
 @router.get("", response_model=list[ProblemResponse])
-async def list_problems(session: SessionDep, _: CurrentUserID):
-    return await problem_service.list_problems(session)
+async def list_problems(session: SessionDep, user_id: CurrentUserID):
+    return await ProblemRepository(session).list_for_user(user_id)
 
 
 @router.get("/cf-tags", response_model=CFTagsResponse)
@@ -32,20 +42,13 @@ async def list_cf_tags(_: CurrentUserID):
 
 
 @router.get("/{problem_id}", response_model=ProblemResponse)
-async def get_problem(problem_id: int, session: SessionDep, _: CurrentUserID):
-    problem = await problem_service.get_problem(session, problem_id)
-    if not problem:
-        raise HTTPException(404, "Problem not found")
-    return problem
+async def get_problem(problem_id: int, session: SessionDep, user_id: CurrentUserID, contest_id: int | None = None):
+    return await problem_service.get_problem_for_user(session, problem_id, user_id, contest_id)
 
 
 @router.get("/{problem_id}/statement", response_class=HTMLResponse)
-async def get_problem_statement(problem_id: int, session: SessionDep):
-    # No auth: opened via plain <a target="_blank"> which can't carry the JWT.
-    # Content is public judge HTML anyway; this is just a proxy.
-    problem = await problem_service.get_problem(session, problem_id)
-    if not problem:
-        raise HTTPException(404, "Problem not found")
+async def get_problem_statement(problem_id: int, session: SessionDep, user_id: CurrentUserID, contest_id: int | None = None):
+    problem = await problem_service.get_problem_for_user(session, problem_id, user_id, contest_id)
 
     try:
         adapter = registry.get(problem.external_source)
@@ -54,8 +57,12 @@ async def get_problem_statement(problem_id: int, session: SessionDep):
 
     try:
         html = await adapter.render_statement_html(problem)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(502, f"Upstream judge returned {e.response.status_code}")
+    except (httpx.HTTPError, RuntimeError) as e:
+        logger.warning("Statement fetch failed for problem %s: %s", problem_id, e)
+        raise HTTPException(
+            502,
+            "Источник временно не отдаёт условие задачи. Попробуйте ещё раз или откройте оригинал.",
+        ) from e
 
     return HTMLResponse(html)
 
@@ -75,6 +82,8 @@ async def get_hints(
             )
         except AppError as e:
             raise HTTPException(e.status_code, e.message) from e
+
+    await problem_service.get_problem_for_user(session, problem_id, user_id, contest_id)
 
     cached = await ai_hint_service.get_cached(session, problem_id)
     if cached is not None:
@@ -104,6 +113,14 @@ async def regenerate_hints(
     contest_id: int | None = Query(default=None),
 ):
     await platform_settings_service.require_ai_hints(session)
+    linked = select(contest_problems.c.contest_id).where(contest_problems.c.problem_id == problem_id)
+    owned = linked.join(Contest, Contest.id == contest_problems.c.contest_id).where(Contest.teacher_id == teacher_id)
+    if contest_id is not None:
+        contest = await contest_service.get_contest_for_user(session, contest_id, teacher_id)
+        if contest.teacher_id != teacher_id:
+            raise AppError("Forbidden", 403)
+    elif await session.scalar(linked.limit(1)) is not None and await session.scalar(owned.limit(1)) is None:
+        raise AppError("Forbidden", 403)
     if contest_id is not None:
         try:
             await contest_service.assert_ai_hints_allowed(
@@ -111,6 +128,8 @@ async def regenerate_hints(
             )
         except AppError as e:
             raise HTTPException(e.status_code, e.message) from e
+
+    await problem_service.get_problem_for_user(session, problem_id, teacher_id, contest_id)
 
     hint = await ai_hint_service.regenerate(session, problem_id)
     await session.commit()

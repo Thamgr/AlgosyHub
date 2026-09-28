@@ -1,13 +1,26 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import and_, delete, or_, select
 
 from app.models.contest import Contest, contest_groups, contest_problems
-from app.models.group import group_members
+from app.models.group import group_members, group_observers
 from app.models.problem import Problem
 from app.repositories.base import BaseRepository
 
 
 class ContestRepository(BaseRepository[Contest]):
     model = Contest
+
+    @staticmethod
+    def started_filter():
+        return or_(Contest.starts_at.is_(None), Contest.starts_at <= datetime.now(timezone.utc))
+
+    @classmethod
+    def problems_access_filter(cls, user_id: int):
+        return and_(
+            cls.access_filter(user_id),
+            or_(Contest.teacher_id == user_id, cls.started_filter()),
+        )
 
     async def get_by_group(self, group_id: int, user_id: int) -> list[Contest]:
         result = await self.session.execute(
@@ -22,13 +35,23 @@ class ContestRepository(BaseRepository[Contest]):
     async def get_by_teacher(self, teacher_id: int) -> list[Contest]:
         result = await self.session.execute(
             select(Contest)
-            .where(Contest.teacher_id == teacher_id)
+            .where(or_(Contest.teacher_id == teacher_id,
+                       and_(Contest.is_visible.is_(True), self.observer_filter(teacher_id))))
             .order_by(Contest.id.desc())
         )
         return list(result.scalars().all())
 
     @staticmethod
-    def access_filter(user_id: int):
+    def observer_filter(user_id: int):
+        return (
+            select(contest_groups.c.contest_id)
+            .join(group_observers, group_observers.c.group_id == contest_groups.c.group_id)
+            .where(contest_groups.c.contest_id == Contest.id, group_observers.c.user_id == user_id)
+            .correlate(Contest).exists()
+        )
+
+    @classmethod
+    def access_filter(cls, user_id: int):
         """Owners always have access; others need visibility and group access."""
         has_any_group = (
             select(contest_groups.c.contest_id)
@@ -51,7 +74,7 @@ class ContestRepository(BaseRepository[Contest]):
         )
         return or_(
             Contest.teacher_id == user_id,
-            and_(Contest.is_visible.is_(True), or_(~has_any_group, user_in_group)),
+            and_(Contest.is_visible.is_(True), or_(~has_any_group, user_in_group, cls.observer_filter(user_id))),
         )
 
     async def get_for_user(self, user_id: int) -> list[Contest]:

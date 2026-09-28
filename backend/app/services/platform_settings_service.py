@@ -3,8 +3,13 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
+from app.models.enums import UserRole
 from app.models.platform_settings import PlatformSettings
-from app.schemas.platform_settings import PlatformSettingsResponse, PlatformSettingsUpdate
+from app.models.user import User
+from app.schemas.platform_settings import (
+    PlatformSettingsResponse,
+    PlatformSettingsUpdate,
+)
 
 
 async def get_settings(session: AsyncSession) -> PlatformSettingsResponse:
@@ -35,3 +40,8 @@ async def require_registration(session: AsyncSession) -> None:
 async def require_ai_hints(session: AsyncSession) -> None:
     if not (await get_settings(session)).ai_hints_enabled:
         raise AppError("AI-подсказки отключены администратором", 403)
+
+
+async def require_identity_editing(session: AsyncSession, user: User) -> None:
+    if user.role == UserRole.student and (await get_settings(session)).student_identity_locked:
+        raise AppError("Редактирование ФИ и ников/ID отключено администратором", 403)

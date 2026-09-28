@@ -2,7 +2,9 @@ import asyncio
 import logging
 import re
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
+from html import escape
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -22,6 +24,9 @@ CF_API = f"{CF_BASE}/api"
 # to call `contest.standings` anonymously with no extra params, so a single call
 # returns the full ranklist (multi-MB) — we cache aggressively.
 _CONTEST_TTL = 30 * 60  # 30 minutes
+_STATEMENT_TTL = 60 * 60
+_STATEMENT_CACHE_SIZE = 128
+_STATEMENT_HOSTS = ("codeforces.com", "mirror.codeforces.com", "m1.codeforces.com")
 
 
 def _parse_external_id(external_id: str) -> tuple[int, str]:
@@ -169,6 +174,7 @@ class CodeforcesAdapter(JudgeAdapter):
         # Cache for the full problemset (≈ 5MB JSON, rarely changes).
         self._problemset_cache: dict[str, tuple[float, list[ProblemData]]] = {}
         self._problemset_lock = asyncio.Lock()
+        self._statement_cache: OrderedDict[str, tuple[float, str]] = OrderedDict()
 
     def _lock_for(self, contest_id: int) -> asyncio.Lock:
         lock = self._locks.get(contest_id)
@@ -279,86 +285,65 @@ class CodeforcesAdapter(JudgeAdapter):
             self._problemset_cache[cache_key] = (time.monotonic(), out)
             return out
 
+    async def _fetch_statement_block(self, problem: "Problem") -> str:
+        """Fetch only a verified statement, never a browser challenge page."""
+        from bs4 import BeautifulSoup
+
+        cache_key = problem.external_url
+        cached = self._statement_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _STATEMENT_TTL:
+            self._statement_cache.move_to_end(cache_key)
+            return cached[1]
+
+        source_url = httpx.URL(problem.external_url)
+        failures = []
+        for host in _STATEMENT_HOSTS:
+            url = source_url.copy_with(scheme="https", host=host, port=None)
+            try:
+                # Bound the whole attempt, including redirects and body reads.
+                async with asyncio.timeout(10):
+                    resp = await self._http.get(
+                        url, params={"locale": "ru"}, follow_redirects=True
+                    )
+                resp.raise_for_status()
+            except (httpx.HTTPError, TimeoutError) as exc:
+                failures.append(f"{host}: {exc}")
+                continue
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            block = soup.select_one("div.problem-statement")
+            if block is None or not block.get_text(strip=True):
+                failures.append(f"{host}: missing problem-statement")
+                continue
+
+            body = str(block)
+            self._statement_cache[cache_key] = (time.monotonic(), body)
+            self._statement_cache.move_to_end(cache_key)
+            while len(self._statement_cache) > _STATEMENT_CACHE_SIZE:
+                self._statement_cache.popitem(last=False)
+            return body
+
+        logger.warning("CF statement unavailable for %s: %s", problem.external_id, "; ".join(failures))
+        raise RuntimeError("Codeforces statement is temporarily unavailable")
+
     async def render_statement_html(self, problem: "Problem") -> str:
-        """Возвращает чистую страницу только с блоком условия задачи.
-
-        Дефолтная реализация в `JudgeAdapter` отдаёт полную страницу CF (с
-        шапкой, сайдбаром, футером, формой логина и т.д.), и в iframe она
-        выглядит как «условие где-то далеко внизу». Здесь мы вырезаем
-        ровно `div.problem-statement`, оборачиваем в минимальный HTML и
-        подключаем MathJax с CF-делимитерами `$$$...$$$`, чтобы формулы
-        рендерились так же, как на самом CF.
-
-        Запрашиваем русскую локаль (`?locale=ru`) — у большинства задач
-        CF есть русский перевод, и наша аудитория русскоязычная.
-        """
-        try:
-            resp = await self._http.get(
-                problem.external_url, params={"locale": "ru"}
-            )
-        except httpx.HTTPError as e:
-            raise RuntimeError(f"CF statement fetch failed: {e}") from e
-        if resp.status_code != 200:
-            raise RuntimeError(
-                f"CF statement HTTP {resp.status_code} for {problem.external_url}"
-            )
-
-        try:
-            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
-        except ImportError:
-            # Без bs4 не можем вырезать блок — отдаём дефолтную реализацию
-            # (полная страница + <base href>).
-            return await super().render_statement_html(problem)
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        block = soup.select_one("div.problem-statement")
-        if block is None:
-            return await super().render_statement_html(problem)
-
+        """Render the Russian statement with Codeforces math delimiters."""
+        body = await self._fetch_statement_block(problem)
         return _CF_STATEMENT_TEMPLATE.format(
             base=CF_BASE,
-            title=f"{problem.external_id} — {problem.title}",
-            body=str(block),
+            title=escape(f"{problem.external_id} — {problem.title}"),
+            body=body,
         )
 
     async def fetch_statement_text(self, problem: "Problem") -> str | None:
-        """Extract the plain-text problem statement from the CF page.
+        """Use the same verified statement for hints and the problem page."""
+        from bs4 import BeautifulSoup
 
-        CF рендерит условие в ``<div class="problem-statement">``: внутри —
-        заголовок (название/лимиты/IO), параграфы, спецификации входа/выхода,
-        примеры и заметка. Берём весь текст этого блока и нормализуем
-        переносы строк, чтобы было удобно вставлять в LLM-промпт.
-
-        Просим русскую локаль (`?locale=ru`), чтобы LLM работала с тем же
-        текстом, на котором потом будет генерироваться русская подсказка.
-        """
         try:
-            resp = await self._http.get(
-                problem.external_url, params={"locale": "ru"}
-            )
-        except httpx.HTTPError as e:
-            logger.warning("CF statement fetch failed: %s", e)
+            body = await self._fetch_statement_block(problem)
+        except RuntimeError:
             return None
-        if resp.status_code != 200:
-            logger.warning(
-                "CF statement HTTP %s for %s", resp.status_code, problem.external_url
-            )
-            return None
-
-        # bs4 импорт ленивый — на случай, если кому-то нужно поднять
-        # бекенд без LLM-стека вообще.
-        try:
-            from bs4 import BeautifulSoup  # type: ignore[import-not-found]
-        except ImportError:
-            logger.warning("beautifulsoup4 not installed, can't extract CF statement")
-            return None
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        block = soup.select_one("div.problem-statement")
-        if block is None:
-            return None
-        text = block.get_text("\n", strip=True)
-        # Свёрстаем последовательные пустые строки в одну.
+        text = BeautifulSoup(body, "html.parser").get_text("\n", strip=True)
         return re.sub(r"\n{3,}", "\n\n", text)
 
     def submit_url(self, contest_external_id: str, problem_index: str) -> str | None:

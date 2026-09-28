@@ -1,12 +1,19 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Table, Column, func
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 group_members = Table(
     "group_members",
+    Base.metadata,
+    Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
+group_observers = Table(
+    "group_observers",
     Base.metadata,
     Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
     Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),

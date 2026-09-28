@@ -6,12 +6,6 @@ class UserRole(str, enum.Enum):
     teacher = "teacher"
 
 
-class ContestStatus(str, enum.Enum):
-    draft = "draft"
-    running = "running"
-    finished = "finished"
-
-
 class ExternalSource(str, enum.Enum):
     codeforces = "codeforces"
     informatics = "informatics"

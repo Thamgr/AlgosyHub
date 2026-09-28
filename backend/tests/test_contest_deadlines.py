@@ -2,10 +2,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from pydantic import ValidationError
+from sqlalchemy import select
+
 from app.core.security import create_access_token
 from app.integrations.judges.base import ExternalSubmission
 from app.models.contest import Contest
-from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict, UserRole
+from app.models.enums import ExternalSource, SubmissionVerdict, UserRole
 from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
 from app.models.submission import Submission
@@ -14,8 +17,6 @@ from app.repositories.contest_repo import ContestRepository
 from app.repositories.submission_repo import SubmissionRepository
 from app.schemas.contest import ContestCreate, ContestUpdate, MatchContestRequest
 from app.services import contest_service, submission_service
-from pydantic import ValidationError
-from sqlalchemy import select
 
 
 @pytest_asyncio.fixture
@@ -33,10 +34,8 @@ def auth(user):
 
 
 @pytest.mark.parametrize("schema", [ContestCreate, MatchContestRequest])
-def test_creation_requires_aware_ordered_deadline(schema):
+def test_creation_accepts_unbounded_but_requires_aware_ordered_dates(schema):
     for fields in (
-        {},
-        {"ends_at": None},
         {"ends_at": "2026-09-25T12:00:00"},
         {"starts_at": "2026-09-25T12:00:00Z", "ends_at": "2026-09-25T12:00:00Z"},
     ):
@@ -44,12 +43,17 @@ def test_creation_requires_aware_ordered_deadline(schema):
             schema(title="Contest", **fields)
     model = schema(title="Contest", ends_at="2026-09-25T15:00:00+03:00")
     assert model.ends_at.astimezone(timezone.utc).hour == 12
+    assert schema(title="Open").ends_at is None
+    assert schema(title="Open", starts_at=None, ends_at=None).starts_at is None
+    with pytest.raises(ValidationError):
+        schema(title="Legacy", status="draft")
 
 
 def test_partial_update_distinguishes_missing_and_null():
     assert ContestUpdate(title="New").model_dump(exclude_unset=True) == {"title": "New"}
+    assert ContestUpdate(ends_at=None).model_dump(exclude_unset=True) == {"ends_at": None}
     with pytest.raises(ValidationError):
-        ContestUpdate(ends_at=None)
+        ContestUpdate(status="running")
 
 
 @pytest.mark.asyncio
@@ -72,7 +76,7 @@ async def test_create_edit_deadline_permissions_and_status(
             headers=auth(teacher),
             json={"title": "Missing deadline"},
         )
-    ).status_code == 422
+    ).status_code == 201
     for user in (student, other):
         assert (
             await client.patch(
@@ -85,9 +89,7 @@ async def test_create_edit_deadline_permissions_and_status(
         await client.patch(
             f"/api/v1/contests/{cid}", headers=auth(teacher), json={"ends_at": None}
         )
-    ).status_code == 422
-    started = await client.post(f"/api/v1/contests/{cid}/start", headers=auth(teacher))
-    assert started.json()["status"] == "running"
+    ).status_code == 200
     past = datetime.now(timezone.utc) - timedelta(minutes=1)
     expired = await client.patch(
         f"/api/v1/contests/{cid}",
@@ -95,13 +97,13 @@ async def test_create_edit_deadline_permissions_and_status(
         json={"ends_at": past.isoformat()},
     )
     assert expired.status_code == 200, expired.text
-    assert expired.json()["status"] == "finished"
+    assert expired.json()["is_active"] is False
     extended = await client.patch(
         f"/api/v1/contests/{cid}",
         headers=auth(teacher),
         json={"ends_at": future.isoformat()},
     )
-    assert extended.json()["status"] == "running"
+    assert extended.json()["is_active"] is True
     # Unrelated metadata edits preserve the deadline.
     renamed = await client.patch(
         f"/api/v1/contests/{cid}", headers=auth(teacher), json={"title": "Renamed"}
@@ -125,7 +127,6 @@ async def contest_setup(session, participants):
     contest = await contest_service.create_contest(
         session, teacher.id, [], "Contest", None, end
     )
-    contest.status = ContestStatus.running
     problem = Problem(
         external_source=ExternalSource.timus,
         external_id="1000",
@@ -238,7 +239,7 @@ async def test_same_external_submission_id_from_different_judges(
 
 
 @pytest.mark.asyncio
-async def test_legacy_contest_and_manual_finish(session, contest_setup):
+async def test_unbounded_contest_and_setting_end_preserve_submissions(session, contest_setup):
     contest, problem, student, _ = contest_setup
     contest.ends_at = None
     sent = datetime.now(timezone.utc) - timedelta(seconds=1)
@@ -254,8 +255,8 @@ async def test_legacy_contest_and_manual_finish(session, contest_setup):
     )
     await session.flush()
     assert len(await SubmissionRepository(session).list_for_contest(contest.id)) == 1
-    await contest_service.set_status(
-        session, contest.id, contest.teacher_id, ContestStatus.finished
+    await contest_service.update_contest(
+        session, contest.id, contest.teacher_id, ends_at=datetime.now(timezone.utc)
     )
     assert contest.ends_at is not None
     assert contest.ends_at > sent

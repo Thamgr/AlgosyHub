@@ -1,13 +1,20 @@
 import type { Contest } from "../api/types";
 
-export function contestTimer(contest: Pick<Contest, "status" | "starts_at" | "ends_at">, now: number) {
+type ContestWindow = Pick<Contest, "starts_at" | "ends_at">;
+
+export function contestTiming(contest: ContestWindow, now: number) {
+  const hasStarted = !contest.starts_at || Date.parse(contest.starts_at) <= now;
+  return { hasStarted, isActive: hasStarted && (!contest.ends_at || now < Date.parse(contest.ends_at)) };
+}
+
+export function contestTimer(contest: ContestWindow, now: number) {
   const start = contest.starts_at ? Date.parse(contest.starts_at) : null;
   const end = contest.ends_at ? Date.parse(contest.ends_at) : null;
-  const started = contest.status === "running" || (start !== null && start <= now);
-  if (contest.status === "finished" || (started && end !== null && end <= now)) {
+  const { hasStarted } = contestTiming(contest, now);
+  if (end !== null && end <= now) {
     return { label: "Контест завершён", milliseconds: 0 };
   }
-  if (!started) {
+  if (!hasStarted) {
     return { label: "Длительность контеста", milliseconds: start !== null && end !== null ? Math.max(0, end - start) : null };
   }
   return { label: "До окончания", milliseconds: end !== null ? Math.max(0, end - now) : null };

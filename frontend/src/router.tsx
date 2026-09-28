@@ -11,6 +11,7 @@ import CreateGroup from "./pages/CreateGroup";
 import EditContest from "./pages/EditContest";
 import Groups from "./pages/Groups";
 import GroupDetail from "./pages/GroupDetail";
+import GroupSettings from "./pages/GroupSettings";
 import MatchContest from "./pages/MatchContest";
 import ProblemDetail from "./pages/ProblemDetail";
 import ProfileSettings from "./pages/ProfileSettings";
@@ -53,6 +54,7 @@ export default function Router() {
                 element={<RequireTeacher><CreateGroup /></RequireTeacher>}
               />
               <Route path="/groups/:id" element={<GroupDetail />} />
+              <Route path="/groups/:id/settings" element={<GroupSettings />} />
               <Route
                 path="/contests/new"
                 element={<RequireTeacher><CreateContest /></RequireTeacher>}

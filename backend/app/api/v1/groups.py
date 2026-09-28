@@ -5,10 +5,19 @@ from fastapi import APIRouter, Body, Depends
 from app.api.v1.contests import _to_responses
 from app.core.deps import CurrentUser, CurrentUserID, SessionDep, require_role
 from app.models.enums import UserRole
+from app.models.user import User
+from app.repositories.group_repo import GroupRepository
 from app.schemas.auth import UserResponse
 from app.schemas.contest import ContestResponse
-from app.schemas.group import GroupCreate, GroupResponse, GroupScoreboardResponse
-from app.services import contest_service, group_service, group_scoreboard_service
+from app.schemas.group import (
+    GroupCreate,
+    GroupDetailResponse,
+    GroupResponse,
+    GroupScoreboardResponse,
+    GroupSettingsResponse,
+    GroupUpdate,
+)
+from app.services import contest_service, group_scoreboard_service, group_service
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -27,9 +36,44 @@ async def list_groups(session: SessionDep, user: CurrentUser):
     return await group_service.list_groups(session, user.id, user.role)
 
 
-@router.get("/{group_id}", response_model=GroupResponse)
+@router.get("/{group_id}", response_model=GroupDetailResponse)
 async def get_group(group_id: int, session: SessionDep, _: CurrentUserID):
-    return await group_service.get_group(session, group_id)
+    group = await group_service.get_group(session, group_id)
+    return {
+        **GroupResponse.model_validate(group).model_dump(),
+        "author": await session.get(User, group.teacher_id),
+    }
+
+
+@router.get("/{group_id}/settings", response_model=GroupSettingsResponse)
+async def get_group_settings(group_id: int, session: SessionDep, teacher_id: TeacherDep):
+    group = await group_service.get_owned_group(session, group_id, teacher_id)
+    return {"group": group, "members": await group_service.get_members(session, group_id),
+            "observers": await GroupRepository(session).get_observers(group_id)}
+
+
+@router.post("/{group_id}/observers", status_code=204)
+async def add_observer(
+    group_id: int, session: SessionDep, teacher_id: TeacherDep,
+    username: str = Body(..., embed=True),
+):
+    await group_service.add_observer_by_username(session, group_id, teacher_id, username)
+    await session.commit()
+
+
+@router.delete("/{group_id}/observers/{user_id}", status_code=204)
+async def remove_observer(group_id: int, user_id: int, session: SessionDep, teacher_id: TeacherDep):
+    await group_service.remove_observer(session, group_id, teacher_id, user_id)
+    await session.commit()
+
+
+@router.patch("/{group_id}", response_model=GroupResponse)
+async def update_group(
+    group_id: int, body: GroupUpdate, session: SessionDep, teacher_id: TeacherDep
+):
+    group = await group_service.rename_group(session, group_id, teacher_id, body.name)
+    await session.commit()
+    return group
 
 
 @router.get("/{group_id}/members", response_model=list[UserResponse])

@@ -2,9 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+
 from app.core.security import create_access_token
 from app.models.contest import Contest
-from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict, UserRole
+from app.models.enums import ExternalSource, SubmissionVerdict, UserRole
 from app.models.group import Group, group_members
 from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
@@ -77,7 +78,8 @@ async def test_edit_schedule_and_partial_update_validation(client, session, setu
     assert response.status_code == 201, response.text
     cid = response.json()['id']
     path = f'/api/v1/contests/{cid}'
-    assert response.json()['status'] == 'draft'
+    assert response.json()['is_active'] is False
+    assert 'status' not in response.json()
     assert response.json()['is_visible'] is True
     for fields in ({'starts_at': end.isoformat()}, {'ends_at': start.isoformat()}, {'starts_at':'2026-12-01T12:00:00'}):
         assert (await client.patch(path, headers=auth(owner), json=fields)).status_code == 422
@@ -89,20 +91,28 @@ async def test_edit_schedule_and_partial_update_validation(client, session, setu
     assert unchanged.json()['is_visible'] is False
     cleared = await client.patch(path, headers=auth(owner), json={'starts_at': None})
     assert cleared.json()['starts_at'] is None
-    assert cleared.json()['status'] == 'draft'
-    assert (await client.post(path+'/start', headers=auth(owner))).json()['status'] == 'running'
+    assert cleared.json()['is_active'] is True
+    for action in ('start', 'finish'):
+        assert (await client.post(path+'/'+action, headers=auth(owner))).status_code in (404, 405)
 
 
-def test_status_at_schedule_boundaries():
+def test_activity_at_schedule_boundaries():
     start = datetime(2026, 12, 1, tzinfo=timezone.utc)
     end = start + timedelta(hours=1)
-    contest = Contest(status=ContestStatus.draft, starts_at=start, ends_at=end)
-    assert contest.effective_status(start - timedelta(seconds=1)) == ContestStatus.draft
-    assert contest.effective_status(start) == ContestStatus.running
-    assert contest.effective_status(end - timedelta(seconds=1)) == ContestStatus.running
-    assert contest.effective_status(end) == ContestStatus.finished
-    contest.status = ContestStatus.finished
-    assert contest.effective_status(start) == ContestStatus.finished
+    contest = Contest(starts_at=start, ends_at=end)
+    assert not contest.has_started(start - timedelta(microseconds=1))
+    assert not contest.is_active(start - timedelta(microseconds=1))
+    assert contest.is_active(start)
+    assert contest.is_active(end - timedelta(microseconds=1))
+    assert not contest.is_active(end)
+    assert contest.has_started(end)
+    contest.starts_at = None
+    assert contest.is_active(start - timedelta(days=100))
+    contest.ends_at = None
+    assert contest.is_active(end + timedelta(days=100))
+    contest.starts_at = start
+    assert not contest.is_active(start - timedelta(seconds=1))
+    assert contest.is_active(start)
 
 
 @pytest.mark.asyncio
@@ -119,12 +129,10 @@ async def test_automatic_start_polling_and_scoring_window(client, session, setup
     await session.flush()
     await ContestRepository(session).add_problem(contest.id, problem.id, 0)
     # Schedule is effective even without a status mutation or a browser visit.
-    assert contest.status == ContestStatus.draft
     targets = await submission_service._collect_polling_targets(session)
     assert targets[(member.id, ExternalSource.timus)].contest_id_by_problem_id[problem.id] == contest.id
     path = f'/api/v1/contests/{contest.id}'
-    assert (await client.get(path, headers=auth(owner))).json()['status'] == 'running'
-    assert (await client.delete(path+f'/problems/{problem.id}', headers=auth(owner))).status_code == 400
+    assert (await client.get(path, headers=auth(owner))).json()['is_active'] is True
     for sent in (start-timedelta(seconds=1), start, end-timedelta(seconds=1), end):
         session.add(Submission(user_id=member.id, problem_id=problem.id, contest_id=contest.id, language='C++', verdict=SubmissionVerdict.accepted, created_at=sent))
     await session.flush()
@@ -136,8 +144,8 @@ async def test_automatic_start_polling_and_scoring_window(client, session, setup
     assert len(await repo.list_for_problem(member.id, problem.id)) == 4
     await contest_service.update_contest(session, contest.id, owner.id, starts_at=now+timedelta(minutes=30))
     assert await submission_service._collect_polling_targets(session) == {}
-    assert (await client.get(path, headers=auth(owner))).json()['status'] == 'draft'
-    # Explicit early launch moves a future start to now.
-    started = await client.post(path+'/start', headers=auth(owner))
-    assert started.json()['status'] == 'running'
-    assert datetime.fromisoformat(started.json()['starts_at']) <= datetime.now(timezone.utc)
+    assert (await client.get(path, headers=auth(owner))).json()['is_active'] is False
+    # Changing the time is the only way to reopen the scoring window.
+    changed = await client.patch(path, headers=auth(owner), json={'starts_at': start.isoformat()})
+    assert changed.json()['is_active'] is True
+    assert len(await repo.list_for_problem(member.id, problem.id)) == 4

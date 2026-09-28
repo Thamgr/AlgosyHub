@@ -8,7 +8,7 @@ A contest is owned by exactly one teacher and is exposed to zero or more
 
 import random
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +17,8 @@ from app.core.exceptions import AppError
 from app.integrations.judges import registry
 from app.integrations.judges.codeforces import CodeforcesAdapter
 from app.models.contest import Contest
-from app.models.enums import ContestStatus, ExternalSource, SubmissionVerdict, UserRole
-from app.models.group import group_members
+from app.models.enums import ExternalSource, SubmissionVerdict, UserRole
+from app.models.group import Group, group_members, group_observers
 from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
 from app.models.submission import Submission
@@ -41,9 +41,21 @@ class ScoreboardCell:
 class ScoreboardRow:
     user_id: int
     username: str
+    full_name: str
+    avatar_emoji: str
     cells: dict[int, ScoreboardCell]  # problem_id -> cell
     solved: int
     attempts_total: int
+
+
+async def require_owned_groups(session: AsyncSession, teacher_id: int, group_ids: list[int]) -> None:
+    if not group_ids:
+        return
+    owned = set((await session.scalars(select(Group.id).where(
+        Group.id.in_(group_ids), Group.teacher_id == teacher_id,
+    ))).all())
+    if owned != set(group_ids):
+        raise AppError("Контест можно назначить только своим группам", 403)
 
 
 async def create_contest(
@@ -57,6 +69,7 @@ async def create_contest(
     show_ai_hints: bool = True,
     is_visible: bool = True,
 ) -> Contest:
+    await require_owned_groups(session, teacher_id, group_ids)
     repo = ContestRepository(session)
     # Legacy ``group_id`` keeps the first attached group so old code paths
     # (e.g. the simple "contests for a group" listing) still see the contest.
@@ -98,6 +111,15 @@ async def list_contests_for_group(session: AsyncSession, group_id: int, user_id:
     return await ContestRepository(session).get_by_group(group_id, user_id)
 
 
+async def require_problems_available(
+    session: AsyncSession, contest_id: int, user_id: int
+) -> Contest:
+    contest = await get_contest_for_user(session, contest_id, user_id)
+    if contest.teacher_id != user_id and not contest.has_started():
+        raise AppError("Задачи будут доступны после начала контеста", 403)
+    return contest
+
+
 async def list_contests_for_user(
     session: AsyncSession, user_id: int, role: UserRole
 ) -> list[Contest]:
@@ -120,6 +142,7 @@ async def set_groups(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
+    await require_owned_groups(session, teacher_id, group_ids)
     await repo.set_groups(contest_id, group_ids)
     contest.group_id = group_ids[0] if group_ids else None
     await session.flush()
@@ -148,8 +171,6 @@ async def add_problem(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
-    if contest.effective_status() != ContestStatus.draft:
-        raise AppError("Cannot modify a running or finished contest", 400)
 
     problem = await problem_service.import_problem(session, source, external_id)
 
@@ -173,39 +194,12 @@ async def assert_ai_hints_allowed(
     user_id: int,
 ) -> None:
     """Raise if hints are disabled for this contest or the problem is not in it."""
-    contest = await get_contest_for_user(session, contest_id, user_id)
+    contest = await require_problems_available(session, contest_id, user_id)
     if not contest.show_ai_hints:
         raise AppError("AI hints are disabled for this contest", 403)
     problems = await get_problems(session, contest_id)
     if not any(p.id == problem_id for p in problems):
         raise AppError("Problem not in contest", 400)
-
-
-async def set_status(
-    session: AsyncSession, contest_id: int, teacher_id: int, status: ContestStatus
-) -> Contest:
-    repo = ContestRepository(session)
-    contest = await repo.get(contest_id)
-    if not contest:
-        raise AppError("Contest not found", 404)
-    if contest.teacher_id != teacher_id:
-        raise AppError("Forbidden", 403)
-    # Manual finish establishes the same cutoff as a scheduled deadline.
-    if status == ContestStatus.running:
-        now = datetime.now(timezone.utc)
-        if contest.ends_at is not None and contest.ends_at <= now:
-            raise AppError("Перед запуском укажите время окончания в будущем", 422)
-        # Starting a scheduled contest early starts its scoring window now.
-        # Legacy contests without a start keep their historical scoring behavior.
-        if contest.starts_at is not None and contest.starts_at > now:
-            contest.starts_at = now
-    if status == ContestStatus.finished:
-        now = datetime.now(timezone.utc)
-        if contest.ends_at is None or contest.ends_at > now:
-            contest.ends_at = now
-    contest.status = status
-    await session.flush()
-    return contest
 
 
 async def update_contest(
@@ -215,11 +209,11 @@ async def update_contest(
     *,
     title: str | None = None,
     show_ai_hints: bool | None = None,
-    ends_at: datetime | None = None,
+    ends_at: datetime | None | object = _UNSET,
     starts_at: datetime | None | object = _UNSET,
     is_visible: bool | None = None,
 ) -> Contest:
-    """Update metadata; an explicitly null start clears the schedule."""
+    """Update metadata; null removes a time boundary without deleting history."""
     repo = ContestRepository(session)
     contest = await repo.get(contest_id)
     if not contest:
@@ -228,7 +222,7 @@ async def update_contest(
         raise AppError("Forbidden", 403)
 
     new_start = contest.starts_at if starts_at is _UNSET else starts_at
-    new_end = contest.ends_at if ends_at is None else ends_at
+    new_end = contest.ends_at if ends_at is _UNSET else ends_at
     if new_start is not None and new_end is not None and new_end <= new_start:
         raise AppError("Время окончания должно быть позже времени начала", 422)
 
@@ -238,7 +232,7 @@ async def update_contest(
             raise AppError("Title cannot be empty", 400)
         contest.title = title
 
-    if ends_at is not None:
+    if ends_at is not _UNSET:
         contest.ends_at = ends_at
 
     if starts_at is not _UNSET:
@@ -281,8 +275,6 @@ async def remove_problem(
         raise AppError("Contest not found", 404)
     if contest.teacher_id != teacher_id:
         raise AppError("Forbidden", 403)
-    if contest.effective_status() != ContestStatus.draft:
-        raise AppError("Cannot modify a running or finished contest", 400)
 
     existing = await repo.get_problems(contest_id)
     if not any(p.id == problem_id for p in existing):
@@ -315,6 +307,7 @@ async def create_matched_contest(
     e.g. ``["dp", "graphs"]`` yields only problems that have *both* tags.
     Rating range is applied client-side because CF doesn't filter on it.
     """
+    await require_owned_groups(session, teacher_id, group_ids)
     try:
         adapter = registry.get(ExternalSource.codeforces)
     except KeyError as e:
@@ -333,9 +326,7 @@ async def create_matched_contest(
             return rating_min is None and rating_max is None
         if rating_min is not None and rating < rating_min:
             return False
-        if rating_max is not None and rating > rating_max:
-            return False
-        return True
+        return rating_max is None or rating <= rating_max
 
     candidates = [p for p in problems if in_range(p.difficulty)]
     if not candidates:
@@ -410,6 +401,13 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
         for u in connected.scalars().unique().all():
             users[u.id] = u
 
+    # Observation alone never creates a participant, including from old submissions.
+    observer_ids = set()
+    if group_ids:
+        observer_ids = set((await session.scalars(select(group_observers.c.user_id).where(
+            group_observers.c.group_id.in_(group_ids),
+        ))).all()) - users.keys()
+
     # Users that have submitted at all (covers ad-hoc / non-member submitters).
     if problem_ids:
         submitters = await session.execute(
@@ -419,7 +417,8 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
             .distinct()
         )
         for u in submitters.scalars().unique().all():
-            users.setdefault(u.id, u)
+            if u.id not in observer_ids:
+                users.setdefault(u.id, u)
 
     # Gather all relevant submissions in one query.
     cells: dict[int, dict[int, ScoreboardCell]] = {
@@ -453,6 +452,8 @@ async def scoreboard(session: AsyncSession, contest_id: int) -> list[ScoreboardR
             ScoreboardRow(
                 user_id=uid,
                 username=user.username,
+                full_name=user.full_name,
+                avatar_emoji=user.avatar_emoji,
                 cells=user_cells,
                 solved=solved,
                 attempts_total=attempts_total,

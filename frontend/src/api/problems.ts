@@ -4,8 +4,13 @@ import type { Problem, ProblemHints } from "./types";
 export const problemsApi = {
   list: () => api.get<Problem[]>("/api/v1/problems").then((r) => r.data),
 
-  get: (id: number) =>
-    api.get<Problem>(`/api/v1/problems/${id}`).then((r) => r.data),
+  get: (id: number, contestId?: number) =>
+    api.get<Problem>(`/api/v1/problems/${id}`, { params: { contest_id: contestId } }).then((r) => r.data),
+
+  statement: (id: number, contestId?: number) =>
+    api.get<string>(`/api/v1/problems/${id}/statement`, {
+      params: { contest_id: contestId }, responseType: "text",
+    }).then((r) => r.data),
 
   getHints: (id: number, contestId?: number) =>
     api

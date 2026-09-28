@@ -2,6 +2,7 @@ from app.core.database import Base
 from app.models.ai_message import AIMessage
 from app.models.contest import Contest, contest_groups, contest_problems
 from app.models.group import Group, group_members
+from app.models.group_material import GroupMaterial
 from app.models.judge_account import JudgeAccount
 from app.models.problem import Problem
 from app.models.problem_hint import ProblemHint
@@ -14,6 +15,7 @@ __all__ = [
     "User",
     "PlatformSettings",
     "Group",
+    "GroupMaterial",
     "group_members",
     "Problem",
     "ProblemHint",

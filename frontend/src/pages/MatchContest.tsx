@@ -7,10 +7,12 @@ import ContestDeadlineField from "../components/ContestDeadlineField";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
+import { useAuthStore } from "../store/auth";
 import { problemsApi } from "../api/problems";
 import type { Group } from "../api/types";
 
 export default function MatchContest() {
+  const userId = useAuthStore((s) => s.user?.id);
   const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
@@ -28,9 +30,9 @@ export default function MatchContest() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    groupsApi.list().then(setGroups);
+    groupsApi.list().then((items) => setGroups(items.filter((group) => group.teacher_id === userId)));
     problemsApi.listCFTags().then(setTags).catch(() => {});
-  }, []);
+  }, [userId]);
 
   function toggleGroup(id: number) {
     setSelectedGroups((prev) => {
@@ -61,7 +63,7 @@ export default function MatchContest() {
         title: title.trim(),
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         is_visible: isVisible,
-        ends_at: new Date(endsAt).toISOString(),
+        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         group_ids: Array.from(selectedGroups),
         tags: Array.from(selectedTags),
         rating_min: ratingMin ? Number(ratingMin) : undefined,
@@ -88,7 +90,7 @@ export default function MatchContest() {
         <p className="text-sm text-gray-500 mb-6">
           Мы возьмём публичный архив задач Codeforces, отфильтруем по тегам
           и диапазону сложности, а затем случайно выберем нужное количество
-          задач. Контест создастся со статусом <span className="font-mono">draft</span>.
+          задач.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -223,7 +225,7 @@ export default function MatchContest() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={loading || !title.trim() || !endsAt}
+              disabled={loading || !title.trim()}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? "Подбираем..." : "Подобрать контест"}

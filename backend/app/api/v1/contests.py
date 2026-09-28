@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.deps import CurrentUser, CurrentUserID, SessionDep, require_role
 from app.models.contest import Contest
-from app.models.enums import ContestStatus, UserRole
+from app.models.enums import UserRole
 from app.schemas.contest import (
     AddProblemRequest,
     ContestCreate,
@@ -31,7 +31,8 @@ async def _to_response(session, contest: Contest) -> ContestResponse:
         group_id=contest.group_id,
         group_ids=group_ids,
         title=contest.title,
-        status=contest.effective_status(),
+        is_active=contest.is_active(),
+        teacher_id=contest.teacher_id,
         starts_at=contest.starts_at,
         ends_at=contest.ends_at,
         show_ai_hints=contest.show_ai_hints,
@@ -109,7 +110,7 @@ async def get_contest(contest_id: int, session: SessionDep, user_id: CurrentUser
 
 @router.get("/{contest_id}/problems", response_model=list[ProblemResponse])
 async def get_problems(contest_id: int, session: SessionDep, user_id: CurrentUserID):
-    await contest_service.get_contest_for_user(session, contest_id, user_id)
+    await contest_service.require_problems_available(session, contest_id, user_id)
     return await contest_service.get_problems(session, contest_id)
 
 
@@ -169,29 +170,11 @@ async def update_groups(
     return await _to_response(session, contest)
 
 
-@router.post("/{contest_id}/start", response_model=ContestResponse)
-async def start_contest(contest_id: int, session: SessionDep, teacher_id: TeacherDep):
-    contest = await contest_service.set_status(
-        session, contest_id, teacher_id, ContestStatus.running
-    )
-    await session.commit()
-    return await _to_response(session, contest)
-
-
-@router.post("/{contest_id}/finish", response_model=ContestResponse)
-async def finish_contest(contest_id: int, session: SessionDep, teacher_id: TeacherDep):
-    contest = await contest_service.set_status(
-        session, contest_id, teacher_id, ContestStatus.finished
-    )
-    await session.commit()
-    return await _to_response(session, contest)
-
-
 @router.get("/{contest_id}/scoreboard", response_model=ScoreboardResponse)
 async def get_scoreboard(
     contest_id: int, session: SessionDep, user_id: CurrentUserID
 ):
-    await contest_service.get_contest_for_user(session, contest_id, user_id)
+    await contest_service.require_problems_available(session, contest_id, user_id)
     problems = await contest_service.get_problems(session, contest_id)
     rows = await contest_service.scoreboard(session, contest_id)
     return ScoreboardResponse(
@@ -200,6 +183,8 @@ async def get_scoreboard(
             ScoreboardRowResponse(
                 user_id=row.user_id,
                 username=row.username,
+                full_name=row.full_name,
+                avatar_emoji=row.avatar_emoji,
                 solved=row.solved,
                 attempts_total=row.attempts_total,
                 cells=[

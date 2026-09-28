@@ -5,21 +5,35 @@ import { contestsApi } from "../api/contests";
 import { problemsApi } from "../api/problems";
 import { getApiError } from "../api/errors";
 import { useViewMode } from "../hooks/useViewMode";
+import { useNow } from "../hooks/useNow";
+import { useAuthStore } from "../store/auth";
+import { contestTiming } from "../lib/contestTimer";
 import { usePlatformSettings } from "../store/platformSettings";
 import { getJudgeLabel, getJudgeSubmitUrl } from "../lib/judgeUrls";
 import type { Contest, Problem, ProblemHints } from "../api/types";
 
 export default function ProblemDetail() {
-  const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
   const { id } = useParams<{ id: string }>();
-  const problemId = Number(id);
   const [search] = useSearchParams();
-  const contestIdParam = search.get("contest");
-  const contestId = contestIdParam ? Number(contestIdParam) : null;
+  const contestParam = search.get("contest");
+  return <ProblemContent key={`${id}-${contestParam}`} problemId={Number(id)} contestId={contestParam ? Number(contestParam) : null} />;
+}
+
+function ProblemContent({ problemId, contestId }: { problemId: number; contestId: number | null }) {
+  const aiHintsEnabled = usePlatformSettings((s) => s.settings?.ai_hints_enabled === true);
+  const showTags = usePlatformSettings((s) => s.settings?.show_problem_tags === true);
+  const showDifficulty = usePlatformSettings((s) => s.settings?.show_problem_difficulty === true);
   const { isTeacher, isStudentView } = useViewMode();
+  const userId = useAuthStore((s) => s.user?.id);
+  const now = useNow();
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [contest, setContest] = useState<Contest | null>(null);
+  const [problemError, setProblemError] = useState("");
+  const [statement, setStatement] = useState("");
+  const [statementError, setStatementError] = useState("");
+  const [statementAttempt, setStatementAttempt] = useState(0);
+  const hasStarted = contest ? contestTiming(contest, now).hasStarted : false;
   const [failedContestId, setFailedContestId] = useState<number | null>(null);
   const [hints, setHints] = useState<ProblemHints | null>(null);
   const [revealed, setRevealed] = useState<0 | 1 | 2 | 3>(0);
@@ -27,8 +41,21 @@ export default function ProblemDetail() {
   const [hintsError, setHintsError] = useState("");
 
   useEffect(() => {
-    problemsApi.get(problemId).then(setProblem).catch(() => setProblem(null));
-  }, [problemId]);
+    let active = true;
+    problemsApi.get(problemId, contestId ?? undefined).then((value) => {
+      if (active) { setProblem(value); setProblemError(""); }
+    }).catch((err) => { if (active) setProblemError(getApiError(err, "Задача недоступна")); });
+    return () => { active = false; };
+  }, [problemId, contestId, hasStarted]);
+
+  useEffect(() => {
+    if (!problem || problemError) return;
+    let active = true;
+    problemsApi.statement(problemId, contestId ?? undefined).then((html) => {
+      if (active) { setStatement(html); setStatementError(""); }
+    }).catch((err) => { if (active) setStatementError(getApiError(err, "Не удалось загрузить условие")); });
+    return () => { active = false; };
+  }, [problem, problemError, problemId, contestId, statementAttempt]);
 
   useEffect(() => {
     if (contestId == null || Number.isNaN(contestId)) {
@@ -80,19 +107,21 @@ export default function ProblemDetail() {
     }
   }
 
-  if (isStudentView && contestId != null) {
-    if (Number.isNaN(contestId) || failedContestId === contestId || (contest?.id === contestId && !contest.is_visible)) {
+  if (contestId != null) {
+    if (Number.isNaN(contestId) || failedContestId === contestId || (isStudentView && contest?.id === contestId && !contest.is_visible)) {
       return <div className="p-6 text-sm text-gray-500"><Link to="/" className="text-blue-600">← Назад</Link><p className="mt-4">Контест недоступен ученикам.</p></div>;
     }
     if (contest?.id !== contestId) return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
+    if (!hasStarted && !(isTeacher && contest.teacher_id === userId)) {
+      return <div className="p-6 text-sm text-gray-500"><Link to={`/contests/${contestId}`} className="text-blue-600">← К контесту</Link><p className="mt-4">Задачи будут доступны после начала контеста.</p></div>;
+    }
   }
+
+  if (problemError) return <div className="p-6 text-sm text-gray-500"><Link to="/" className="text-blue-600">← Назад</Link><p className="mt-4">{problemError}</p></div>;
 
   if (!problem)
     return <div className="p-6 text-sm text-gray-500">Загрузка...</div>;
 
-  const statementUrl = `${
-    import.meta.env.VITE_API_URL ?? ""
-  }/api/v1/problems/${problem.id}/statement`;
   const submitUrl = getJudgeSubmitUrl(problem);
 
   const backHref = contestId != null ? `/contests/${contestId}` : "/";
@@ -110,11 +139,11 @@ export default function ProblemDetail() {
             <h1 className="text-2xl font-semibold">{problem.title}</h1>
             <div className="text-xs text-gray-500 mt-1">
               {getJudgeLabel(problem.external_source)} · {problem.external_id}
-              {problem.difficulty != null && (
+              {showDifficulty && problem.difficulty != null && (
                 <> · сложность {problem.difficulty}</>
               )}
             </div>
-            {problem.tags.length > 0 && (
+            {showTags && problem.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {problem.tags.map((t) => (
                   <span
@@ -147,19 +176,34 @@ export default function ProblemDetail() {
               showHints ? "lg:col-span-2" : ""
             }`}
           >
-            <iframe
-              src={statementUrl}
+            {statementError ? <div className="space-y-3" role="alert">
+              <p className="text-sm text-red-500">{statementError}</p>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <button
+                  onClick={() => {
+                    setStatement("");
+                    setStatementError("");
+                    setStatementAttempt((attempt) => attempt + 1);
+                  }}
+                  className="text-blue-600 hover:underline"
+                >Попробовать ещё раз</button>
+                <a href={problem.external_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                  Открыть условие на {getJudgeLabel(problem.external_source)} ↗
+                </a>
+              </div>
+            </div> : !statement ? <p className="text-sm text-gray-500">Загрузка условия...</p> : <iframe
+              srcDoc={statement}
               title={`Условие: ${problem.title}`}
               className="w-full h-[75vh] border rounded bg-white"
-              sandbox="allow-same-origin allow-popups allow-scripts"
-            />
+              sandbox="allow-popups allow-scripts"
+            />}
           </div>
 
           {showHints ? (
             <aside className="border rounded bg-white p-4">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-semibold">AI-подсказки</h2>
-                {hints && isTeacher && (
+                {hints && isTeacher && contest?.teacher_id === userId && (
                   <button
                     onClick={regenerate}
                     disabled={hintsLoading}

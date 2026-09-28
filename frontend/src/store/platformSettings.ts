@@ -5,6 +5,9 @@ import { getApiError } from "../api/errors";
 export interface PlatformSettings {
   registration_enabled: boolean;
   ai_hints_enabled: boolean;
+  show_problem_tags: boolean;
+  show_problem_difficulty: boolean;
+  student_identity_locked: boolean;
 }
 
 interface SettingsState {

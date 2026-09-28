@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import Link from "../components/ViewLink";
 import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
-import { usersApi } from "../api/users";
+import { meApi, usersApi } from "../api/users";
 import { useAuthStore } from "../store/auth";
 import type { User, UserProfile } from "../api/types";
 import AppHeader from "../components/AppHeader";
 import ProfileSettingsPanel from "../components/ProfileSettingsPanel";
+import UserAvatar from "../components/UserAvatar";
+import ProfileAvatar from "../components/ProfileAvatar";
+import { displayName } from "../lib/userDisplay";
 
 export default function UserProfilePage() {
   const { username = "" } = useParams<{ username: string }>();
@@ -15,10 +18,11 @@ export default function UserProfilePage() {
 
 function ProfileContent({ username }: { username: string }) {
   const navigate = useNavigate();
-  const { user: me, logout } = useAuthStore();
+  const { user: me, logout, setUser } = useAuthStore();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -32,8 +36,17 @@ function ProfileContent({ username }: { username: string }) {
   const isOwnProfile = profile != null && me?.id === profile.id;
   const fullName = profile?.full_name ?? "";
 
-  function handleProfileSaved(updated: User) {
-    setProfile((current) => current ? { ...current, ...updated } : current);
+  async function saveProfile(fields: Partial<Pick<User, "full_name" | "avatar_emoji">>) {
+    if (profileSaving) throw new Error("Дождитесь завершения сохранения");
+    setProfileSaving(true);
+    try {
+      const updated = await meApi.updateProfile(fields);
+      setUser(updated);
+      setProfile((current) => current ? { ...current, ...updated } : current);
+      return updated;
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   return (
@@ -54,11 +67,16 @@ function ProfileContent({ username }: { username: string }) {
           <div className={isOwnProfile ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] gap-8 items-start" : ""}>
             <div className="min-w-0 space-y-6">
               <div className="bg-white border rounded p-6">
-                <div className="flex items-baseline justify-between gap-4">
-                  <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold break-words">{profile.username}</h1>
-                    {fullName && <p className="text-sm text-gray-700 mt-2 break-words">{fullName}</p>}
-                    <p className="text-xs text-gray-500 mt-1">{profile.role}</p>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-4">
+                    {isOwnProfile
+                      ? <ProfileAvatar user={profile} disabled={profileSaving} onSave={(emoji) => saveProfile({ avatar_emoji: emoji })} />
+                      : <UserAvatar user={profile} size="lg" />}
+                    <div className="min-w-0">
+                      <h1 className="text-2xl font-semibold break-words">{displayName(profile)}</h1>
+                      {fullName && <p className="text-sm text-gray-500 mt-1 break-words">@{profile.username}</p>}
+                      <p className="text-xs text-gray-500 mt-1">{profile.role}</p>
+                    </div>
                   </div>
                   {isOwnProfile && (
                     <div className="flex items-center gap-3 text-sm">
@@ -84,7 +102,7 @@ function ProfileContent({ username }: { username: string }) {
                   <StatCard
                     label="Сдано задач"
                     value={profile.stats.solved_problems.toString()}
-                    hint="Уникальные задачи, по которым есть хотя бы одна успешная посылка."
+                    hint="Уникальные задачи с успешной посылкой. Для контестов учитываются только посылки в пределах времени зачёта."
                   />
                   <StatCard
                     label="% успешных посылок"
@@ -94,7 +112,7 @@ function ProfileContent({ username }: { username: string }) {
                 </div>
               </section>
             </div>
-            {isOwnProfile && <ProfileSettingsPanel user={profile} onSaved={handleProfileSaved} />}
+            {isOwnProfile && <ProfileSettingsPanel user={profile} disabled={profileSaving} onSaveName={(fullName) => saveProfile({ full_name: fullName })} />}
           </div>
         )}
       </main>

@@ -5,9 +5,14 @@ import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
 import ContestTimer from "../components/ContestTimer";
+import UserIdentity from "../components/UserIdentity";
 import { judgeAccountsApi } from "../api/judgeAccounts";
 import { submissionsApi } from "../api/submissions";
 import { useViewMode } from "../hooks/useViewMode";
+import { useNow } from "../hooks/useNow";
+import { contestTiming } from "../lib/contestTimer";
+import { useAuthStore } from "../store/auth";
+import { usePlatformSettings } from "../store/platformSettings";
 import { getJudgeLabel, JUDGE_PROBLEM_SOURCES, getProblemSourcePlaceholder } from "../lib/judgeUrls";
 import type {
   Contest,
@@ -61,8 +66,13 @@ export default function ContestDetail() {
   const { id } = useParams<{ id: string }>();
   const contestId = Number(id);
   const { isTeacher, isStudentView } = useViewMode();
+  const userId = useAuthStore((s) => s.user?.id);
+  const now = useNow();
 
   const [contest, setContest] = useState<Contest | null>(null);
+  const isOwner = isTeacher && contest?.teacher_id === userId;
+  const timing = contest ? contestTiming(contest, now) : null;
+  const problemsAvailable = !!contest && (isOwner || timing?.hasStarted === true);
   const [loadError, setLoadError] = useState("");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -92,9 +102,19 @@ export default function ContestDetail() {
     });
     refresh();
     const timer = setInterval(refresh, 15000);
-    contestsApi.getProblems(contestId).then(setProblems).catch(() => {});
     return () => { active = false; clearInterval(timer); };
   }, [contestId]);
+
+  useEffect(() => {
+    if (!problemsAvailable) return;
+    let active = true;
+    const refresh = () => contestsApi.getProblems(contestId).then((value) => {
+      if (active) setProblems(value);
+    }).catch(() => { if (active) setProblems([]); });
+    void refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, [contestId, problemsAvailable]);
 
   useEffect(() => {
     if (!contest || contest.group_ids.length === 0) return;
@@ -121,47 +141,37 @@ export default function ContestDetail() {
     [submissions],
   );
 
-  const loadSubmissions = useCallback(async () => {
-    setSubmissionsBusy(true);
-    try {
-      const list = await submissionsApi.listForContest(contestId, { mine: true });
+  const loadSubmissions = useCallback(() =>
+    submissionsApi.listForContest(contestId, { mine: true }).then((list) => {
       setSubmissions(list);
       setSubmissionsAt(Date.now());
-    } catch {
+    }).catch(() => {
       /* swallow — next tick or click will retry */
-    } finally {
-      setSubmissionsBusy(false);
-    }
-  }, [contestId]);
+    }), [contestId]);
 
-  const loadScoreboard = useCallback(async () => {
-    setScoreboardBusy(true);
-    try {
-      const sb = await contestsApi.scoreboard(contestId);
+  const loadScoreboard = useCallback(() =>
+    contestsApi.scoreboard(contestId).then((sb) => {
       setScoreboard(sb);
       setScoreboardAt(Date.now());
-    } catch {
-      /* swallow — likely 403 for pre-running contests */
-    } finally {
-      setScoreboardBusy(false);
-    }
-  }, [contestId]);
+    }).catch(() => {
+      /* retry on the next refresh */
+    }), [contestId]);
 
   // Poll the user's own submissions.
   useEffect(() => {
-    if (isTeacher) return;
+    if (isTeacher || !problemsAvailable) return;
     loadSubmissions();
     const interval = setInterval(loadSubmissions, hasActive ? 3000 : 10000);
     return () => clearInterval(interval);
-  }, [hasActive, isTeacher, loadSubmissions]);
+  }, [hasActive, isTeacher, loadSubmissions, problemsAvailable]);
 
   // Poll the scoreboard while the scoreboard tab is open or for teachers always.
   useEffect(() => {
-    if (tab !== "scoreboard" && !isTeacher) return;
+    if (!problemsAvailable || (tab !== "scoreboard" && !isTeacher)) return;
     loadScoreboard();
     const interval = setInterval(loadScoreboard, 15000);
     return () => clearInterval(interval);
-  }, [tab, isTeacher, loadScoreboard]);
+  }, [tab, isTeacher, loadScoreboard, problemsAvailable]);
 
   const connectedSources = useMemo(
     () => new Set(judgeAccounts.map((a) => a.source)),
@@ -202,21 +212,6 @@ export default function ContestDetail() {
     }
   }
 
-  async function handleStart() {
-    try {
-      const updated = await contestsApi.start(contestId);
-      setContest(updated);
-      setAddError("");
-    } catch (err: unknown) {
-      setAddError(getApiError(err, "Не удалось запустить контест"));
-    }
-  }
-
-  async function handleFinish() {
-    const updated = await contestsApi.finish(contestId);
-    setContest(updated);
-  }
-
   if (loadError || (isStudentView && contest && !contest.is_visible))
     return <div className="p-6 text-sm text-gray-500"><Link to="/" className="text-blue-600">← Назад</Link><p className="mt-4">{loadError || "Контест скрыт от учеников."}</p></div>;
 
@@ -238,7 +233,7 @@ export default function ContestDetail() {
             <ContestTimer contest={contest} />
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-            <span className="px-2 py-0.5 rounded bg-gray-100">{contest.status}</span>
+            <span className="px-2 py-0.5 rounded bg-gray-100">{timing?.isActive ? "Идёт" : "Неактивен"}</span>
             {!contest.is_visible && <span className="text-amber-700">Скрыт от участников</span>}
             {contest.group_ids.length > 0 && (
               <span className="text-gray-400">·</span>
@@ -254,7 +249,7 @@ export default function ContestDetail() {
             ))}
           </div>
         </div>
-        {isTeacher && (
+        {isOwner && (
           <div className="flex gap-2">
             <Link
               to={`/contests/${contestId}/edit`}
@@ -262,33 +257,11 @@ export default function ContestDetail() {
             >
               Редактировать
             </Link>
-            {contest.status === "draft" && (
-              <button
-                onClick={handleStart}
-                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                Запустить
-              </button>
-            )}
-            {contest.status === "running" && (
-              <button
-                onClick={handleFinish}
-                className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Завершить
-              </button>
-            )}
           </div>
         )}
       </div>
 
-      {contest.starts_at && (
-        <p className="text-sm text-gray-600 mb-2">
-          Начало: {new Date(contest.starts_at).toLocaleString()} ({Intl.DateTimeFormat().resolvedOptions().timeZone}).
-          {contest.status === "draft" ? " Запуск по расписанию." : " Посылки до начала не идут в зачёт."}
-        </p>
-      )}
-
+      {!problemsAvailable ? <p className="text-sm text-gray-500 mt-4">Задачи будут доступны после начала контеста.</p> : <>
       {missingSources.length > 0 && (
         <div className="mb-4 border border-yellow-300 bg-yellow-50 text-yellow-900 rounded p-3 text-sm">
           В этом контесте есть задачи с{" "}
@@ -321,7 +294,7 @@ export default function ContestDetail() {
         <ProblemsTab
           problems={problems}
           contest={contest}
-          isTeacher={isTeacher}
+          isTeacher={isOwner}
           solvedProblemIds={solvedProblemIds}
           addSource={addSource}
           setAddSource={setAddSource}
@@ -338,7 +311,10 @@ export default function ContestDetail() {
           submissions={submissions}
           problemsById={problemsById}
           indexByProblemId={indexByProblemId}
-          onRefresh={loadSubmissions}
+          onRefresh={async () => {
+            setSubmissionsBusy(true);
+            try { await loadSubmissions(); } finally { setSubmissionsBusy(false); }
+          }}
           refreshing={submissionsBusy}
           updatedAt={submissionsAt}
         />
@@ -348,11 +324,15 @@ export default function ContestDetail() {
         <ScoreboardTab
           scoreboard={scoreboard}
           problems={problems}
-          onRefresh={loadScoreboard}
+          onRefresh={async () => {
+            setScoreboardBusy(true);
+            try { await loadScoreboard(); } finally { setScoreboardBusy(false); }
+          }}
           refreshing={scoreboardBusy}
           updatedAt={scoreboardAt}
         />
       )}
+      </>}
     </div>
   );
 }
@@ -405,6 +385,8 @@ function ProblemsTab({
   addLoading: boolean;
   onAdd: (e: React.FormEvent) => void;
 }) {
+  const showTags = usePlatformSettings((s) => s.settings?.show_problem_tags === true);
+  const showDifficulty = usePlatformSettings((s) => s.settings?.show_problem_difficulty === true);
   return (
     <div>
       <div className="border rounded bg-white">
@@ -446,14 +428,14 @@ function ProblemsTab({
                       </Link>
                       <div className="text-xs text-gray-400">
                         {getJudgeLabel(p.external_source)} · {p.external_id}
-                        {p.tags.length > 0 && (
+                        {showTags && p.tags.length > 0 && (
                           <> · {p.tags.join(", ")}</>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 w-16">
+                    {showDifficulty && <td className="px-4 py-3 text-gray-400 w-16">
                       {p.difficulty ?? "—"}
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
@@ -462,7 +444,7 @@ function ProblemsTab({
         )}
       </div>
 
-      {isTeacher && contest.status === "draft" && (
+      {isTeacher && (
         <form onSubmit={onAdd} className="flex gap-2 mt-3">
           <select
             aria-label="Источник задачи"
@@ -638,9 +620,9 @@ function ScoreboardTab({
               <td className="px-3 py-2 font-medium">
                 <Link
                   to={`/u/${row.username}`}
-                  className="hover:underline"
+                  className="inline-block max-w-64 hover:underline"
                 >
-                  {row.username}
+                  <UserIdentity user={row} />
                 </Link>
               </td>
               <td className="px-3 py-2 text-center font-mono">
@@ -703,19 +685,13 @@ function RefreshButton({
   refreshing: boolean;
   updatedAt: number | null;
 }) {
-  const [, force] = useState(0);
-  // Re-render every 15s so the relative timestamp ticks forward without us
-  // forcing a refetch.
-  useEffect(() => {
-    const interval = setInterval(() => force((x) => x + 1), 15000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = useNow();
 
   return (
     <div className="flex items-center gap-2 text-xs text-gray-400">
       {updatedAt != null && (
         <span title={new Date(updatedAt).toLocaleString()}>
-          {formatRelative(Date.now() - updatedAt)}
+          {formatRelative(now - updatedAt)}
         </span>
       )}
       <button

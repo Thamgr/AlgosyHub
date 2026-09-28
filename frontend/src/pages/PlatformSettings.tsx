@@ -18,6 +18,21 @@ const switches: { key: keyof PlatformSettings; title: string; description: strin
     title: "AI-подсказки",
     description: "Показывает подсказки на страницах задач и разрешает их получение. В отдельных контестах подсказки могут быть дополнительно отключены.",
   },
+  {
+    key: "show_problem_tags",
+    title: "Темы задач",
+    description: "Показывает темы и теги в списках задач и на страницах задач для всех пользователей.",
+  },
+  {
+    key: "show_problem_difficulty",
+    title: "Сложность задач",
+    description: "Показывает сложность в списках задач и на страницах задач для всех пользователей.",
+  },
+  {
+    key: "student_identity_locked",
+    title: "Запрет редактирования ФИ и ID учениками",
+    description: "Запрещает ученикам менять фамилию и имя, добавлять, изменять и удалять ники/ID проверяющих систем.",
+  },
 ];
 
 export default function PlatformSettingsPage() {

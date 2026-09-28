@@ -25,9 +25,9 @@ from app.services.group_service import get_group
 async def scoreboard(
     session: AsyncSession, group_id: int, user_id: int
 ) -> GroupScoreboardResponse:
-    group = await get_group(session, group_id)
+    await get_group(session, group_id)
     repo = GroupRepository(session)
-    if group.teacher_id != user_id and not await repo.is_member(group_id, user_id):
+    if not await repo.can_read(group_id, user_id):
         raise AppError("Forbidden", 403)
 
     members = await repo.get_members(group_id)
@@ -36,6 +36,8 @@ async def scoreboard(
         member.id: GroupScoreboardRow(
             user_id=member.id,
             username=member.username,
+            full_name=member.full_name,
+            avatar_emoji=member.avatar_emoji,
             solved=0,
             attempts_total=0,
             cells=[],
@@ -52,6 +54,7 @@ async def scoreboard(
         .where(
             contest_groups.c.group_id == group_id,
             Contest.is_visible.is_(True),
+            ContestRepository.started_filter(),
             ContestRepository.access_filter(user_id),
         )
         .order_by(Contest.id.desc(), contest_problems.c.order_index, Problem.id)

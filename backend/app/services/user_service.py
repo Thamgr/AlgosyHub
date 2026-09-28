@@ -28,12 +28,15 @@ async def update_profile(
     user_id: int,
     *,
     full_name: str | None = None,
+    avatar_emoji: str | None = None,
 ) -> User:
     user = await UserRepository(session).get(user_id)
     if not user:
         raise AppError("Пользователь не найден", 404)
     if full_name is not None:
         user.full_name = full_name
+    if avatar_emoji is not None:
+        user.avatar_emoji = avatar_emoji
     await session.flush()
     await session.refresh(user)
     return user

@@ -9,9 +9,12 @@ router = APIRouter(tags=["submissions"])
 
 @router.get("/submissions/{submission_id}", response_model=SubmissionResponse)
 async def get_submission(
-    submission_id: int, session: SessionDep, _: CurrentUserID
+    submission_id: int, session: SessionDep, user_id: CurrentUserID
 ):
-    return await submission_service.get_submission(session, submission_id)
+    submission = await submission_service.get_submission(session, submission_id)
+    if submission.contest_id is not None:
+        await contest_service.require_problems_available(session, submission.contest_id, user_id)
+    return submission
 
 
 @router.get(
@@ -24,7 +27,7 @@ async def list_contest_submissions(
     mine: bool = False,
     user_id: int | None = None,
 ):
-    await contest_service.get_contest_for_user(session, contest_id, current_user_id)
+    await contest_service.require_problems_available(session, contest_id, current_user_id)
     target_user_id: int | None = None
     if mine:
         target_user_id = current_user_id

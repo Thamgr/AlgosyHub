@@ -1,13 +1,18 @@
+import importlib.util
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import create_engine, select
 
 from app.core.exceptions import AppError
 from app.core.security import create_access_token
-from app.models.enums import UserRole
+from app.models.enums import ExternalSource, UserRole
+from app.models.problem import Problem
 from app.models.user import User
 from app.services import ai_hint_service, contest_service
 
@@ -30,8 +35,9 @@ async def users(session):
 async def test_public_defaults_permissions_and_partial_updates(client, users):
     admin, teacher, student = users
     path = "/api/v1/platform-settings"
+    defaults = {"registration_enabled": True, "ai_hints_enabled": True, "show_problem_tags": False, "show_problem_difficulty": False, "student_identity_locked": False}
     response = await client.get(path)
-    assert response.json() == {"registration_enabled": True, "ai_hints_enabled": True}
+    assert response.json() == defaults
     assert response.headers["cache-control"] == "no-store"
     for headers in ({}, auth(teacher), auth(student)):
         response = await client.patch(path, headers=headers, json={"registration_enabled": False})
@@ -40,12 +46,52 @@ async def test_public_defaults_permissions_and_partial_updates(client, users):
     assert (await client.get("/api/v1/auth/me", headers=auth(admin))).json()["is_platform_admin"] is True
     response = await client.patch(path, headers=auth(admin), json={"registration_enabled": False})
     assert response.status_code == 200
-    assert response.json() == {"registration_enabled": False, "ai_hints_enabled": True}
+    assert response.json() == {**defaults, "registration_enabled": False}
     response = await client.patch(path, headers=auth(admin), json={"ai_hints_enabled": False})
-    assert response.json() == {"registration_enabled": False, "ai_hints_enabled": False}
+    assert response.json() == {**defaults, "registration_enabled": False, "ai_hints_enabled": False}
     assert (await client.get(path)).json() == response.json()
     for body in ({"ai_hints_enabled": None}, {"ai_hints_enabled": "false"}, {"unknown": False}):
         assert (await client.patch(path, headers=auth(admin), json=body)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_problem_display_switches_are_independent_and_admin_only(client, users):
+    admin, teacher, student = users
+    path = "/api/v1/platform-settings"
+    await client.patch(path, headers=auth(admin), json={"registration_enabled": False, "ai_hints_enabled": False})
+    for key in ("show_problem_tags", "show_problem_difficulty"):
+        for headers in ({}, auth(teacher), auth(student)):
+            assert (await client.patch(path, headers=headers, json={key: True})).status_code in (401, 403)
+        for invalid in (None, "true", 1):
+            assert (await client.patch(path, headers=auth(admin), json={key: invalid})).status_code == 422
+        before = (await client.get(path)).json()
+        response = await client.patch(path, headers=auth(admin), json={key: True})
+        assert response.status_code == 200
+        assert response.json() == {**before, key: True}
+        assert (await client.get(path)).json() == response.json()
+    response = await client.patch(path, headers=auth(admin), json={"show_problem_tags": False, "show_problem_difficulty": False})
+    assert response.json() == {
+        "registration_enabled": False, "ai_hints_enabled": False,
+        "show_problem_tags": False, "show_problem_difficulty": False,
+        "student_identity_locked": False,
+    }
+
+
+def test_problem_display_migration_preserves_other_settings(monkeypatch):
+    path = Path(__file__).parents[1] / "alembic/versions/0011_problem_metadata_visibility.py"
+    spec = importlib.util.spec_from_file_location("problem_metadata_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE platform_settings (id INTEGER PRIMARY KEY, registration_enabled BOOLEAN NOT NULL, ai_hints_enabled BOOLEAN NOT NULL)")
+            connection.exec_driver_sql("INSERT INTO platform_settings VALUES (1, 0, 1)")
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+            migration.upgrade()
+            assert connection.exec_driver_sql("SELECT * FROM platform_settings").one() == (1, 0, 1, 0, 0)
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -67,7 +113,9 @@ async def test_registration_disabled_login_preserved_and_no_admin_self_assignmen
 
 
 @pytest.mark.asyncio
-async def test_global_ai_blocks_cached_generated_and_regenerated_hints(client, users, monkeypatch):
+async def test_global_ai_blocks_cached_generated_and_regenerated_hints(client, session, users, monkeypatch):
+    session.add(Problem(id=42, external_source=ExternalSource.timus, external_id="1000", title="A+B", external_url="https://acm.timus.ru/"))
+    await session.flush()
     admin, teacher, student = users
     cached = AsyncMock(return_value=SimpleNamespace(problem_id=42, hint1="a", hint2="b", hint3="c"))
     generate = AsyncMock()

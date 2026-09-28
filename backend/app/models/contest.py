@@ -1,10 +1,18 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, func
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.models.enums import ContestStatus
 
 contest_problems = Table(
     "contest_problems",
@@ -33,22 +41,16 @@ class Contest(Base):
     group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id", ondelete="SET NULL"))
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    status: Mapped[ContestStatus] = mapped_column(default=ContestStatus.draft)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     show_ai_hints: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    def effective_status(self, now: datetime | None = None) -> ContestStatus:
+    def has_started(self, now: datetime | None = None) -> bool:
         now = now or datetime.now(timezone.utc)
-        if self.status == ContestStatus.finished:
-            return ContestStatus.finished
-        started = self.status == ContestStatus.running or (
-            self.starts_at is not None and self.starts_at <= now
-        )
-        if not started:
-            return ContestStatus.draft
-        if self.ends_at is not None and self.ends_at <= now:
-            return ContestStatus.finished
-        return ContestStatus.running
+        return self.starts_at is None or self.starts_at <= now
+
+    def is_active(self, now: datetime | None = None) -> bool:
+        now = now or datetime.now(timezone.utc)
+        return self.has_started(now) and (self.ends_at is None or now < self.ends_at)
