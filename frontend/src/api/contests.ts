@@ -13,6 +13,7 @@ export interface CreateContestData {
   is_visible?: boolean;
   ends_at?: string | null;
   show_ai_hints?: boolean;
+  min_solved_for_credit?: number | null;
 }
 
 export interface MatchContestData {
@@ -26,6 +27,7 @@ export interface MatchContestData {
   is_visible?: boolean;
   ends_at?: string | null;
   show_ai_hints?: boolean;
+  min_solved_for_credit?: number | null;
 }
 
 export interface UpdateContestData {
@@ -34,6 +36,7 @@ export interface UpdateContestData {
   ends_at?: string | null;
   title?: string;
   show_ai_hints?: boolean;
+  min_solved_for_credit?: number | null;
 }
 
 export const contestsApi = {

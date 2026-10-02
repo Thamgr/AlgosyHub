@@ -5,6 +5,7 @@ import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
 import ContestTimer from "../components/ContestTimer";
+import ContestProgress from "../components/ContestProgress";
 import UserIdentity from "../components/UserIdentity";
 import { judgeAccountsApi } from "../api/judgeAccounts";
 import { submissionsApi } from "../api/submissions";
@@ -191,6 +192,10 @@ export default function ContestDetail() {
         .map((s) => s.problem_id),
     );
   }, [isTeacher, submissions]);
+  const solvedCount = useMemo(
+    () => problems.filter((problem) => solvedProblemIds.has(problem.id)).length,
+    [problems, solvedProblemIds],
+  );
 
   async function handleAddProblem(e: React.FormEvent) {
     e.preventDefault();
@@ -274,6 +279,14 @@ export default function ContestDetail() {
           . Чтобы AlgosyHub видел ваши посылки, укажите свой ник или ID в{" "}
           <Link to="/settings" className="underline">настройках профиля</Link>.
         </div>
+      )}
+
+      {!isTeacher && (
+        <ContestProgress
+          total={problems.length}
+          solved={solvedCount}
+          minForCredit={contest.min_solved_for_credit}
+        />
       )}
 
       <div className="border-b mb-4 flex gap-4 text-sm">

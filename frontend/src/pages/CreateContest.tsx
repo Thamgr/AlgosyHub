@@ -5,6 +5,8 @@ import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import ContestStartField from "../components/ContestStartField";
 import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
+import ContestCreditField from "../components/ContestCreditField";
+import { parseCreditThreshold } from "../lib/contestCredit";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
@@ -29,6 +31,7 @@ export default function CreateContest() {
   const [isVisible, setIsVisible] = useState(true);
   const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
+  const [minSolvedForCredit, setMinSolvedForCredit] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [groups, setGroups] = useState<Group[]>([]);
   const [problems, setProblems] = useState<ProblemRow[]>([
@@ -67,7 +70,8 @@ export default function CreateContest() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    const creditThreshold = parseCreditThreshold(minSolvedForCredit);
+    if (!title.trim() || creditThreshold === undefined) return;
     setError("");
     setWarnings([]);
     setLoading(true);
@@ -79,6 +83,7 @@ export default function CreateContest() {
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         group_ids: Array.from(selectedGroups),
         show_ai_hints: showAiHints,
+        min_solved_for_credit: creditThreshold,
       });
 
       const cleaned = problems
@@ -193,6 +198,12 @@ export default function CreateContest() {
           </div>
           )}
 
+          <ContestCreditField
+            value={minSolvedForCredit}
+            onChange={setMinSolvedForCredit}
+            problemCount={problems.filter((problem) => problem.externalId.trim()).length}
+          />
+
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium">Задачи</label>
@@ -259,7 +270,7 @@ export default function CreateContest() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={loading || !title.trim()}
+              disabled={loading || !title.trim() || parseCreditThreshold(minSolvedForCredit) === undefined}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? "Создание..." : "Создать"}

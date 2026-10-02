@@ -70,6 +70,7 @@ export interface Contest {
   is_visible: boolean;
   ends_at: string | null;
   show_ai_hints: boolean;
+  min_solved_for_credit: number | null;
 }
 
 export interface Submission {

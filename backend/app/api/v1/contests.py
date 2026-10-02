@@ -36,6 +36,7 @@ async def _to_response(session, contest: Contest) -> ContestResponse:
         starts_at=contest.starts_at,
         ends_at=contest.ends_at,
         show_ai_hints=contest.show_ai_hints,
+        min_solved_for_credit=contest.min_solved_for_credit,
         is_visible=contest.is_visible,
     )
 
@@ -73,6 +74,7 @@ async def create_contest(body: ContestCreate, session: SessionDep, teacher_id: T
         body.starts_at,
         body.ends_at,
         show_ai_hints=body.show_ai_hints,
+        min_solved_for_credit=body.min_solved_for_credit,
         is_visible=body.is_visible,
     )
     await session.commit()
@@ -96,6 +98,7 @@ async def match_contest(
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         show_ai_hints=body.show_ai_hints,
+        min_solved_for_credit=body.min_solved_for_credit,
         is_visible=body.is_visible,
     )
     await session.commit()

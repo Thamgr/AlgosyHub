@@ -67,6 +67,7 @@ async def create_contest(
     ends_at: datetime | None,
     *,
     show_ai_hints: bool = True,
+    min_solved_for_credit: int | None = None,
     is_visible: bool = True,
 ) -> Contest:
     await require_owned_groups(session, teacher_id, group_ids)
@@ -81,6 +82,7 @@ async def create_contest(
         starts_at=starts_at,
         ends_at=ends_at,
         show_ai_hints=show_ai_hints,
+        min_solved_for_credit=min_solved_for_credit,
         is_visible=is_visible,
     )
     if group_ids:
@@ -209,6 +211,7 @@ async def update_contest(
     *,
     title: str | None = None,
     show_ai_hints: bool | None = None,
+    min_solved_for_credit: int | None | object = _UNSET,
     ends_at: datetime | None | object = _UNSET,
     starts_at: datetime | None | object = _UNSET,
     is_visible: bool | None = None,
@@ -243,6 +246,9 @@ async def update_contest(
 
     if show_ai_hints is not None:
         contest.show_ai_hints = show_ai_hints
+
+    if min_solved_for_credit is not _UNSET:
+        contest.min_solved_for_credit = min_solved_for_credit
 
     await session.flush()
     return contest
@@ -299,6 +305,7 @@ async def create_matched_contest(
     starts_at: datetime | None,
     ends_at: datetime | None,
     show_ai_hints: bool = True,
+    min_solved_for_credit: int | None = None,
     is_visible: bool = True,
 ) -> Contest:
     """Pull the full CF problemset, filter by tag+rating, pick ``count`` at random.
@@ -346,6 +353,7 @@ async def create_matched_contest(
         starts_at=starts_at,
         ends_at=ends_at,
         show_ai_hints=show_ai_hints,
+        min_solved_for_credit=min_solved_for_credit,
         is_visible=is_visible,
     )
 

@@ -4,6 +4,8 @@ import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import ContestStartField from "../components/ContestStartField";
 import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
+import ContestCreditField from "../components/ContestCreditField";
+import { parseCreditThreshold } from "../lib/contestCredit";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
 import { groupsApi } from "../api/groups";
@@ -26,6 +28,7 @@ export default function MatchContest() {
   const [ratingMin, setRatingMin] = useState<string>("");
   const [ratingMax, setRatingMax] = useState<string>("");
   const [count, setCount] = useState(5);
+  const [minSolvedForCredit, setMinSolvedForCredit] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +57,8 @@ export default function MatchContest() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    const creditThreshold = parseCreditThreshold(minSolvedForCredit);
+    if (!title.trim() || creditThreshold === undefined) return;
     setError("");
     setLoading(true);
 
@@ -69,6 +73,7 @@ export default function MatchContest() {
         rating_min: ratingMin ? Number(ratingMin) : undefined,
         rating_max: ratingMax ? Number(ratingMax) : undefined,
         count,
+        min_solved_for_credit: creditThreshold,
       });
       navigate(`/contests/${contest.id}`);
     } catch (err: unknown) {
@@ -220,12 +225,18 @@ export default function MatchContest() {
             </div>
           </div>
 
+          <ContestCreditField
+            value={minSolvedForCredit}
+            onChange={setMinSolvedForCredit}
+            problemCount={count}
+          />
+
           {error && <p className="text-red-500 text-sm">{error}</p>}
 
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={loading || !title.trim()}
+              disabled={loading || !title.trim() || parseCreditThreshold(minSolvedForCredit) === undefined}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? "Подбираем..." : "Подобрать контест"}

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -43,6 +44,14 @@ class Contest(Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    min_solved_for_credit: Mapped[int | None] = mapped_column(
+        Integer,
+        CheckConstraint(
+            "min_solved_for_credit > 0",
+            name="ck_contests_min_solved_for_credit_positive",
+        ),
+        nullable=True,
+    )
     show_ai_hints: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

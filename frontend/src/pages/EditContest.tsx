@@ -6,6 +6,8 @@ import { useViewNavigate as useNavigate } from "../hooks/useViewNavigate";
 import ContestStartField from "../components/ContestStartField";
 import ContestVisibilityField from "../components/ContestVisibilityField";
 import ContestDeadlineField from "../components/ContestDeadlineField";
+import ContestCreditField from "../components/ContestCreditField";
+import { parseCreditThreshold } from "../lib/contestCredit";
 import { toLocalDateTime } from "../lib/dateTime";
 import { contestsApi } from "../api/contests";
 import { getApiError } from "../api/errors";
@@ -38,6 +40,7 @@ export default function EditContest() {
   const [isVisible, setIsVisible] = useState(true);
   const [endsAt, setEndsAt] = useState("");
   const [showAiHints, setShowAiHints] = useState(true);
+  const [minSolvedForCredit, setMinSolvedForCredit] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
 
   const [newSource, setNewSource] = useState<ExternalSource>("codeforces");
@@ -66,6 +69,7 @@ export default function EditContest() {
         setIsVisible(c.is_visible);
         setEndsAt(toLocalDateTime(c.ends_at));
         setShowAiHints(c.show_ai_hints);
+        setMinSolvedForCredit(c.min_solved_for_credit?.toString() ?? "");
         setSelectedGroups(new Set(c.group_ids));
       })
       .catch(() => setNotFound(true));
@@ -91,7 +95,9 @@ export default function EditContest() {
   const deadlineDirty = contest != null && toLocalDateTime(endsAt) !== toLocalDateTime(contest.ends_at);
   const startDirty = contest != null && toLocalDateTime(startsAt) !== toLocalDateTime(contest.starts_at);
   const visibilityDirty = contest != null && isVisible !== contest.is_visible;
-  const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty;
+  const creditThreshold = parseCreditThreshold(minSolvedForCredit);
+  const creditDirty = contest != null && creditThreshold !== contest.min_solved_for_credit;
+  const isDirty = titleDirty || groupsDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty || creditDirty;
 
   function toggleGroup(gid: number) {
     setSelectedGroups((prev) => {
@@ -152,12 +158,12 @@ export default function EditContest() {
   }
 
   async function handleSave() {
-    if (!contest) return;
+    if (!contest || creditThreshold === undefined) return;
     setError("");
     setSaving(true);
     try {
       let updated = contest;
-      const metaDirty = titleDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty;
+      const metaDirty = titleDirty || hintsDirty || deadlineDirty || startDirty || visibilityDirty || creditDirty;
       if (metaDirty) {
         updated = await contestsApi.update(contestId, {
           ...(startDirty ? { starts_at: startsAt ? new Date(startsAt).toISOString() : null } : {}),
@@ -165,6 +171,7 @@ export default function EditContest() {
           ...(titleDirty ? { title: title.trim() } : {}),
           ...(deadlineDirty ? { ends_at: endsAt ? new Date(endsAt).toISOString() : null } : {}),
           ...(hintsDirty ? { show_ai_hints: showAiHints } : {}),
+          ...(creditDirty ? { min_solved_for_credit: creditThreshold } : {}),
         });
       }
       if (groupsDirty) {
@@ -177,6 +184,7 @@ export default function EditContest() {
       setStartsAt(toLocalDateTime(updated.starts_at));
       setIsVisible(updated.is_visible);
       setEndsAt(toLocalDateTime(updated.ends_at));
+      setMinSolvedForCredit(updated.min_solved_for_credit?.toString() ?? "");
       setSavedAt(Date.now());
     } catch (err: unknown) {
       setError(getApiError(err, "Не удалось сохранить изменения"));
@@ -291,6 +299,12 @@ export default function EditContest() {
           </div>
           )}
 
+          <ContestCreditField
+            value={minSolvedForCredit}
+            onChange={setMinSolvedForCredit}
+            problemCount={problems.length}
+          />
+
           <div>
             <label className="block text-sm font-medium mb-2">Задачи</label>
             {problems.length === 0 ? (
@@ -367,7 +381,7 @@ export default function EditContest() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !isDirty || !title.trim()}
+              disabled={saving || !isDirty || !title.trim() || creditThreshold === undefined}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? "Сохранение..." : "Сохранить"}

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import (
     AwareDatetime,
@@ -9,6 +10,8 @@ from pydantic import (
 )
 
 from app.models.enums import ExternalSource
+
+MinSolvedForCredit = Annotated[int, Field(strict=True, ge=1, le=2_147_483_647)]
 
 
 class ContestTiming(BaseModel):
@@ -31,6 +34,7 @@ class ContestCreate(ContestTiming):
     # New many-to-many form. If non-empty, takes precedence over ``group_id``.
     group_ids: list[int] = Field(default_factory=list)
     show_ai_hints: bool = True
+    min_solved_for_credit: MinSolvedForCredit | None = None
 
 
 class ContestResponse(BaseModel):
@@ -43,6 +47,7 @@ class ContestResponse(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     show_ai_hints: bool
+    min_solved_for_credit: int | None
     is_visible: bool
 
     model_config = {"from_attributes": True}
@@ -60,6 +65,7 @@ class ContestUpdate(BaseModel):
 
     title: str | None = None
     show_ai_hints: bool | None = None
+    min_solved_for_credit: MinSolvedForCredit | None = None
     ends_at: AwareDatetime | None = None
     starts_at: AwareDatetime | None = None
     is_visible: StrictBool = True
@@ -99,3 +105,4 @@ class MatchContestRequest(ContestTiming):
     rating_max: int | None = None
     count: int = Field(default=5, ge=1, le=15)
     show_ai_hints: bool = True
+    min_solved_for_credit: MinSolvedForCredit | None = None
